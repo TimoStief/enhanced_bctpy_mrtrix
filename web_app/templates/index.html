@@ -16,13 +16,15 @@
                     <div class="mb-4">
                         <label class="form-label fw-bold">Input Directory</label>
                         <div class="input-group">
-                            <input type="text" class="form-control" id="inputDir" placeholder="/path/to/data (e.g., /Users/karl/work/github/bctpy_mrtrix/Test_matrizen)">
-                            <button class="btn btn-primary" type="button" id="chooseInputBtn">
-                                <i class="fas fa-folder-open me-1"></i>Choose
+                            <input type="text" class="form-control" id="inputDir" 
+                                   placeholder="/data/local/129_PK01/derivatives/dsistudio_connectomics/connectivity"
+                                   value="/data/local/129_PK01/derivatives/dsistudio_connectomics/connectivity">
+                            <button class="btn btn-success" type="button" id="validateInputBtn">
+                                <i class="fas fa-check me-1"></i>Validate
                             </button>
                         </div>
                         <small class="text-muted d-block mt-2">
-                            Directory should contain: ses-1, ses-2, ses-3, ses-4 folders with .npy files
+                            Enter path and click Validate to scan for connectivity data
                         </small>
                         <div id="inputError" class="alert alert-danger d-none mt-2" role="alert"></div>
                     </div>
@@ -38,9 +40,6 @@
                         <label class="form-label fw-bold">Output Directory</label>
                         <div class="input-group">
                             <input type="text" class="form-control" id="outputDir" placeholder="Optional: leave empty for auto (input_dir/bct_output)">
-                            <button class="btn btn-outline-secondary" type="button" id="chooseOutputBtn">
-                                <i class="fas fa-folder-open me-1"></i>Choose
-                            </button>
                         </div>
                         <small class="text-muted">Optional: leave empty for default location</small>
                         <div id="outputError" class="alert alert-danger d-none mt-2" role="alert"></div>
@@ -311,14 +310,37 @@ let logUpdateInterval = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded, setting up event listeners...');
     setupEventListeners();
+    console.log('Event listeners configured');
 });
 
 function setupEventListeners() {
-    document.getElementById('chooseInputBtn').addEventListener('click', () => pickFolder('input', true));
-    document.getElementById('chooseOutputBtn').addEventListener('click', () => pickFolder('output', true));
-    document.getElementById('inputDir').addEventListener('input', updateStartButtonState);
-    document.getElementById('startAnalysisBtn').addEventListener('click', startAnalysis);
+    const validateBtn = document.getElementById('validateInputBtn');
+    const startBtn = document.getElementById('startAnalysisBtn');
+    const inputField = document.getElementById('inputDir');
+    
+    console.log('validateBtn:', validateBtn);
+    console.log('startBtn:', startBtn);
+    console.log('inputField:', inputField);
+    
+    if (validateBtn) {
+        validateBtn.addEventListener('click', () => {
+            console.log('Validate button clicked!');
+            pickFolder('input', false);
+        });
+    }
+    
+    if (inputField) {
+        inputField.addEventListener('input', updateStartButtonState);
+        inputField.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') pickFolder('input', false);
+        });
+    }
+    
+    if (startBtn) {
+        startBtn.addEventListener('click', startAnalysis);
+    }
 }
 
 async function pickFolder(type, usePicker = false) {
@@ -371,8 +393,9 @@ async function pickFolder(type, usePicker = false) {
         
         if (data.success) {
             inputElem.value = data.path;
-            if (type === 'input') {
-                await checkSessions(data.path);
+            if (type === 'input' && data.structure) {
+                // Show discovered structure
+                displayStructure(data.structure);
             }
             updateStartButtonState();
         } else {
@@ -383,6 +406,37 @@ async function pickFolder(type, usePicker = false) {
         console.error('Error validating path:', error);
         errorElem.textContent = 'Error validating path: ' + error.message;
         errorElem.classList.remove('d-none');
+    }
+}
+
+function displayStructure(structure) {
+    const folderInfoSection = document.getElementById('folderInfoSection');
+    const folderInfoList = document.getElementById('folderInfoList');
+    const dsiOptionsSection = document.getElementById('dsiOptionsSection');
+    const atlasFilter = document.getElementById('atlasFilter');
+    
+    // Show structure info
+    const sessionsDisplay = structure.sessions.map(s => s.replace('ses-', '')).join(', ');
+    folderInfoList.innerHTML = `
+        <li><strong>${structure.subjects.length}</strong> subjects</li>
+        <li><strong>${structure.sessions.length}</strong> sessions: ${sessionsDisplay}</li>
+        <li><strong>${structure.atlases.length}</strong> atlases: ${structure.atlases.join(', ')}</li>
+        <li><strong>${structure.total_files}</strong> connectivity files</li>
+    `;
+    folderInfoSection.style.display = 'block';
+    
+    // Populate atlas filter
+    atlasFilter.innerHTML = '<option value="">All atlases</option>' +
+        structure.atlases.map(a => `<option value="${a}">${a}</option>`).join('');
+    
+    // Show DSI Studio options
+    if (structure.atlases.length > 0) {
+        dsiOptionsSection.style.display = 'block';
+    }
+}
+}
+    if (structure.atlases.length > 0) {
+        dsiOptionsSection.style.display = 'block';
     }
 }
 

@@ -57,6 +57,17 @@ output_capture = OutputCapture()
 
 
 # Routes
+@app.after_request
+def add_no_cache_headers(response):
+    """Disable caching for all responses"""
+    response.cache_control.no_cache = True
+    response.cache_control.no_store = True
+    response.cache_control.must_revalidate = True
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
 @app.route('/')
 def index():
     """Main page"""
@@ -120,16 +131,25 @@ def analyze():
         if selected_metrics:
             output_capture.write(f"📊 Selected metrics: {', '.join(selected_metrics)}\n")
         
-        if analysis_type == 'full' or analysis_type == 'analyze':
-            df_results, summary = current_analyzer.analyze_matrices(input_dir, output_dir)
-            return jsonify({
-                'success': True,
-                'output_dir': output_dir,
-                'summary': summary,
-                'results_count': len(df_results)
-            })
-        else:
-            return jsonify({'success': False, 'error': 'Unknown analysis type'}), 400
+        # Run analysis in background thread
+        def run_analysis():
+            try:
+                if analysis_type == 'full' or analysis_type == 'analyze':
+                    df_results, summary = current_analyzer.analyze_matrices(input_dir, output_dir)
+                    output_capture.write(f"\n✅ Analysis complete! Results saved to {output_dir}\n")
+                    output_capture.write(f"📊 Processed {summary.get('total_matrices', 0)} matrices\n")
+            except Exception as e:
+                output_capture.write(f"\n❌ Error during analysis: {str(e)}\n")
+        
+        analysis_thread = threading.Thread(target=run_analysis, daemon=True)
+        analysis_thread.start()
+        
+        # Return immediately
+        return jsonify({
+            'success': True,
+            'message': 'Analysis started in background',
+            'output_dir': output_dir
+        })
     
     except Exception as e:
         output_capture.write(f"❌ Error: {str(e)}\n")
@@ -167,10 +187,21 @@ def validate_path():
                 'error': f'Folder not found: {path}'
             })
         
+        # Discover structure
+        analyzer = BCTAnalyzer()
+        structure = analyzer.discover_dsi_studio_structure(path)
+        
         return jsonify({
             'success': True,
             'path': path,
-            'exists': True
+            'exists': True,
+            'structure': {
+                'subjects': structure['subjects'],
+                'sessions': list(structure['sessions']),
+                'atlases': list(structure['atlases']),
+                'metrics': list(structure['metrics']),
+                'total_files': structure['total_files']
+            }
         })
     
     except Exception as e:

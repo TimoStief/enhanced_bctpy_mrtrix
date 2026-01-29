@@ -2,7 +2,8 @@
 .venv/
 venv/
 env/
-
+logs/
+*.log
 # IDE
 .idea/
 .vscode/

@@ -1,0 +1,115 @@
+{
+  "analyses": [
+    {
+      "id": "20260201_083214",
+      "script_name": "pipeline_execution.py",
+      "description": "Wrapper to run a specific analysis script with logging",
+      "parameters": {
+        "script_to_run": "01_global_basic_metrics.py",
+        "run_spec": "(required CLI arg)"
+      },
+      "inputs": [],
+      "outputs": [],
+      "notes": "Initial run of template analysis",
+      "start_time": "2026-02-01T08:32:14.273804",
+      "end_time": "2026-02-01T08:32:14.282536",
+      "duration_seconds": 0.008732,
+      "success": false,
+      "results_summary": {},
+      "environment": {
+        "hostname": "pslg067023",
+        "user": "mri",
+        "python_version": "3.11.5",
+        "working_directory": "/data/local/software/bctpy_mrtrix/analysis_scripts_restructured/1_utilities",
+        "script_hash": null,
+        "git_commit": "da4a698"
+      },
+      "error_message": "Script not found: /data/local/software/bctpy_mrtrix/analysis_scripts_restructured/1_utilities/analysis_scripts_restructured/2_global_network_metrics/01_global_basic_metrics.py",
+      "output_verification": {}
+    },
+    {
+      "id": "20260201_083240",
+      "script_name": "pipeline_execution.py",
+      "description": "Wrapper to run a specific analysis script with logging",
+      "parameters": {
+        "script_to_run": "01_global_basic_metrics.py",
+        "run_spec": "(required CLI arg)"
+      },
+      "inputs": [],
+      "outputs": [],
+      "notes": "Initial run of template analysis",
+      "start_time": "2026-02-01T08:32:40.520402",
+      "end_time": "2026-02-01T08:32:40.529275",
+      "duration_seconds": 0.008873,
+      "success": false,
+      "results_summary": {},
+      "environment": {
+        "hostname": "pslg067023",
+        "user": "mri",
+        "python_version": "3.11.5",
+        "working_directory": "/data/local/software/bctpy_mrtrix/analysis_scripts_restructured/1_utilities",
+        "script_hash": null,
+        "git_commit": "da4a698"
+      },
+      "error_message": "Script not found: /data/local/software/bctpy_mrtrix/analysis_scripts_restructured/1_utilities/analysis_scripts_restructured/2_global_network_metrics/01_global_basic_metrics.py",
+      "output_verification": {}
+    },
+    {
+      "id": "20260201_083317",
+      "script_name": "pipeline_execution.py",
+      "description": "Wrapper to run a specific analysis script with logging",
+      "parameters": {
+        "script_to_run": "01_global_basic_metrics.py",
+        "run_spec": "(required CLI arg)"
+      },
+      "inputs": [],
+      "outputs": [],
+      "notes": "Initial run of template analysis",
+      "start_time": "2026-02-01T08:33:17.370401",
+      "end_time": "2026-02-01T08:33:17.376022",
+      "duration_seconds": 0.005621,
+      "success": true,
+      "results_summary": {
+        "script_executed": "/data/local/software/bctpy_mrtrix/analysis_scripts_restructured/2_global_network_metrics/01_global_basic_metrics.py",
+        "output_dir": "/data/local/129_PK01/derivatives/bct/global_metrics"
+      },
+      "environment": {
+        "hostname": "pslg067023",
+        "user": "mri",
+        "python_version": "3.11.5",
+        "working_directory": "/data/local/software/bctpy_mrtrix/analysis_scripts_restructured/1_utilities",
+        "script_hash": null,
+        "git_commit": "da4a698"
+      },
+      "output_verification": {}
+    },
+    {
+      "id": "20260201_083400",
+      "script_name": "pipeline_execution.py",
+      "description": "Wrapper to run a specific analysis script with logging",
+      "parameters": {
+        "script_to_run": "01_global_basic_metrics.py",
+        "run_spec": "(required CLI arg)"
+      },
+      "inputs": [],
+      "outputs": [],
+      "notes": "Initial run of template analysis",
+      "start_time": "2026-02-01T08:34:00.580983",
+      "end_time": "2026-02-01T08:34:00.603576",
+      "duration_seconds": 0.022593,
+      "success": false,
+      "results_summary": {},
+      "environment": {
+        "hostname": "pslg067023",
+        "user": "mri",
+        "python_version": "3.11.5",
+        "working_directory": "/data/local/software/bctpy_mrtrix/analysis_scripts_restructured/1_utilities",
+        "script_hash": null,
+        "git_commit": "da4a698"
+      },
+      "error_message": "No module named 'bct'",
+      "output_verification": {}
+    }
+  ],
+  "created": "2026-02-01T08:32:14.282633"
+}

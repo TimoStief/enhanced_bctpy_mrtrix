@@ -1,6 +1,6 @@
 Global Degree ANOVA: F=0.084, p=0.967
 
-Region 1 ANOVA:
+deg_region_1 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -9,7 +9,7 @@ session  0.2600 3.0000 9.0000 0.8525
 ====================================
 
 
-Region 2 ANOVA:
+deg_region_2 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -18,7 +18,7 @@ session  2.2903 3.0000 9.0000 0.1470
 ====================================
 
 
-Region 3 ANOVA:
+deg_region_3 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -27,7 +27,7 @@ session  0.4250 3.0000 9.0000 0.7398
 ====================================
 
 
-Region 4 ANOVA:
+deg_region_4 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -36,7 +36,7 @@ session  0.6360 3.0000 9.0000 0.6104
 ====================================
 
 
-Region 5 ANOVA:
+deg_region_5 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -45,7 +45,7 @@ session  0.3338 3.0000 9.0000 0.8014
 ====================================
 
 
-Region 6 ANOVA:
+deg_region_6 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -54,7 +54,7 @@ session  0.9273 3.0000 9.0000 0.4664
 ====================================
 
 
-Region 7 ANOVA:
+deg_region_7 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -63,7 +63,7 @@ session  3.2315 3.0000 9.0000 0.0749
 ====================================
 
 
-Region 8 ANOVA:
+deg_region_8 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -72,7 +72,7 @@ session  0.9740 3.0000 9.0000 0.4468
 ====================================
 
 
-Region 9 ANOVA:
+deg_region_9 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -81,7 +81,7 @@ session  1.7958 3.0000 9.0000 0.2180
 ====================================
 
 
-Region 10 ANOVA:
+deg_region_10 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -90,7 +90,7 @@ session  0.1860 3.0000 9.0000 0.9033
 ====================================
 
 
-Region 11 ANOVA:
+deg_region_11 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -99,7 +99,7 @@ session  1.1547 3.0000 9.0000 0.3792
 ====================================
 
 
-Region 12 ANOVA:
+deg_region_12 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -108,7 +108,7 @@ session  0.6972 3.0000 9.0000 0.5768
 ====================================
 
 
-Region 13 ANOVA:
+deg_region_13 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -117,7 +117,7 @@ session  0.6657 3.0000 9.0000 0.5939
 ====================================
 
 
-Region 14 ANOVA:
+deg_region_14 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -126,7 +126,7 @@ session  0.1179 3.0000 9.0000 0.9473
 ====================================
 
 
-Region 15 ANOVA:
+deg_region_15 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -135,7 +135,7 @@ session  0.2367 3.0000 9.0000 0.8686
 ====================================
 
 
-Region 16 ANOVA:
+deg_region_16 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -144,7 +144,7 @@ session  0.5816 3.0000 9.0000 0.6418
 ====================================
 
 
-Region 17 ANOVA:
+deg_region_17 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -153,7 +153,7 @@ session  0.5764 3.0000 9.0000 0.6449
 ====================================
 
 
-Region 18 ANOVA:
+deg_region_18 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -162,7 +162,7 @@ session  1.7952 3.0000 9.0000 0.2181
 ====================================
 
 
-Region 19 ANOVA:
+deg_region_19 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -171,7 +171,7 @@ session  0.1618 3.0000 9.0000 0.9194
 ====================================
 
 
-Region 20 ANOVA:
+deg_region_20 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -180,7 +180,7 @@ session  0.6808 3.0000 9.0000 0.5856
 ====================================
 
 
-Region 21 ANOVA:
+deg_region_21 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -189,7 +189,7 @@ session  1.1597 3.0000 9.0000 0.3775
 ====================================
 
 
-Region 22 ANOVA:
+deg_region_22 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -198,7 +198,7 @@ session  2.2809 3.0000 9.0000 0.1481
 ====================================
 
 
-Region 23 ANOVA:
+deg_region_23 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -207,7 +207,7 @@ session  1.4982 3.0000 9.0000 0.2801
 ====================================
 
 
-Region 24 ANOVA:
+deg_region_24 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -216,7 +216,7 @@ session  0.8295 3.0000 9.0000 0.5103
 ====================================
 
 
-Region 25 ANOVA:
+deg_region_25 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -225,7 +225,7 @@ session  0.4224 3.0000 9.0000 0.7415
 ====================================
 
 
-Region 26 ANOVA:
+deg_region_26 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -234,7 +234,7 @@ session  0.1254 3.0000 9.0000 0.9427
 ====================================
 
 
-Region 27 ANOVA:
+deg_region_27 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -243,7 +243,7 @@ session  1.7157 3.0000 9.0000 0.2329
 ====================================
 
 
-Region 28 ANOVA:
+deg_region_28 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -252,7 +252,7 @@ session  0.6815 3.0000 9.0000 0.5853
 ====================================
 
 
-Region 29 ANOVA:
+deg_region_29 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -261,7 +261,7 @@ session  1.4821 3.0000 9.0000 0.2840
 ====================================
 
 
-Region 30 ANOVA:
+deg_region_30 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -270,7 +270,7 @@ session  0.7027 3.0000 9.0000 0.5739
 ====================================
 
 
-Region 31 ANOVA:
+deg_region_31 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -279,7 +279,7 @@ session  0.2184 3.0000 9.0000 0.8812
 ====================================
 
 
-Region 32 ANOVA:
+deg_region_32 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -288,7 +288,7 @@ session  0.9244 3.0000 9.0000 0.4676
 ====================================
 
 
-Region 33 ANOVA:
+deg_region_33 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -297,7 +297,7 @@ session  0.4475 3.0000 9.0000 0.7251
 ====================================
 
 
-Region 34 ANOVA:
+deg_region_34 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -306,7 +306,7 @@ session  0.8389 3.0000 9.0000 0.5059
 ====================================
 
 
-Region 35 ANOVA:
+deg_region_35 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -315,7 +315,7 @@ session  0.7599 3.0000 9.0000 0.5443
 ====================================
 
 
-Region 36 ANOVA:
+deg_region_36 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -324,7 +324,7 @@ session  1.9057 3.0000 9.0000 0.1992
 ====================================
 
 
-Region 37 ANOVA:
+deg_region_37 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -333,7 +333,7 @@ session  2.0962 3.0000 9.0000 0.1710
 ====================================
 
 
-Region 38 ANOVA:
+deg_region_38 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -342,7 +342,7 @@ session  0.2829 3.0000 9.0000 0.8366
 ====================================
 
 
-Region 39 ANOVA:
+deg_region_39 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -351,7 +351,7 @@ session  0.3732 3.0000 9.0000 0.7745
 ====================================
 
 
-Region 40 ANOVA:
+deg_region_40 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -360,7 +360,7 @@ session  0.9133 3.0000 9.0000 0.4724
 ====================================
 
 
-Region 41 ANOVA:
+deg_region_41 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -369,7 +369,7 @@ session  2.2817 3.0000 9.0000 0.1480
 ====================================
 
 
-Region 42 ANOVA:
+deg_region_42 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -378,7 +378,7 @@ session  1.0341 3.0000 9.0000 0.4229
 ====================================
 
 
-Region 43 ANOVA:
+deg_region_43 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -387,7 +387,7 @@ session  1.6332 3.0000 9.0000 0.2496
 ====================================
 
 
-Region 44 ANOVA:
+deg_region_44 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -396,7 +396,7 @@ session  4.8375 3.0000 9.0000 0.0284
 ====================================
 
 
-Region 45 ANOVA:
+deg_region_45 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -405,7 +405,7 @@ session  1.5000 3.0000 9.0000 0.2797
 ====================================
 
 
-Region 46 ANOVA:
+deg_region_46 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -414,7 +414,7 @@ session  0.6460 3.0000 9.0000 0.6048
 ====================================
 
 
-Region 47 ANOVA:
+deg_region_47 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -423,7 +423,7 @@ session  0.7413 3.0000 9.0000 0.5537
 ====================================
 
 
-Region 48 ANOVA:
+deg_region_48 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -432,7 +432,7 @@ session  0.5089 3.0000 9.0000 0.6860
 ====================================
 
 
-Region 49 ANOVA:
+deg_region_49 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -441,7 +441,7 @@ session  2.3147 3.0000 9.0000 0.1443
 ====================================
 
 
-Region 50 ANOVA:
+deg_region_50 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -450,7 +450,7 @@ session  0.2601 3.0000 9.0000 0.8524
 ====================================
 
 
-Region 51 ANOVA:
+deg_region_51 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -459,7 +459,7 @@ session  0.7058 3.0000 9.0000 0.5723
 ====================================
 
 
-Region 52 ANOVA:
+deg_region_52 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -468,7 +468,7 @@ session  0.8680 3.0000 9.0000 0.4925
 ====================================
 
 
-Region 53 ANOVA:
+deg_region_53 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -477,7 +477,7 @@ session  0.9945 3.0000 9.0000 0.4385
 ====================================
 
 
-Region 54 ANOVA:
+deg_region_54 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -486,7 +486,7 @@ session  0.8923 3.0000 9.0000 0.4816
 ====================================
 
 
-Region 55 ANOVA:
+deg_region_55 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -495,7 +495,7 @@ session  0.9805 3.0000 9.0000 0.4441
 ====================================
 
 
-Region 56 ANOVA:
+deg_region_56 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -504,7 +504,7 @@ session  0.1886 3.0000 9.0000 0.9015
 ====================================
 
 
-Region 57 ANOVA:
+deg_region_57 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -513,7 +513,7 @@ session  0.2304 3.0000 9.0000 0.8729
 ====================================
 
 
-Region 58 ANOVA:
+deg_region_58 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -522,7 +522,7 @@ session  0.3224 3.0000 9.0000 0.8092
 ====================================
 
 
-Region 59 ANOVA:
+deg_region_59 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -531,7 +531,7 @@ session  4.2160 3.0000 9.0000 0.0404
 ====================================
 
 
-Region 60 ANOVA:
+deg_region_60 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -540,7 +540,7 @@ session  0.7385 3.0000 9.0000 0.5552
 ====================================
 
 
-Region 61 ANOVA:
+deg_region_61 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -549,7 +549,7 @@ session  0.8713 3.0000 9.0000 0.4910
 ====================================
 
 
-Region 62 ANOVA:
+deg_region_62 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -558,7 +558,7 @@ session  1.6534 3.0000 9.0000 0.2454
 ====================================
 
 
-Region 63 ANOVA:
+deg_region_63 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -567,7 +567,7 @@ session  1.3096 3.0000 9.0000 0.3302
 ====================================
 
 
-Region 64 ANOVA:
+deg_region_64 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -576,7 +576,7 @@ session  0.3253 3.0000 9.0000 0.8072
 ====================================
 
 
-Region 65 ANOVA:
+deg_region_65 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -585,7 +585,7 @@ session  2.4122 3.0000 9.0000 0.1340
 ====================================
 
 
-Region 66 ANOVA:
+deg_region_66 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -594,7 +594,7 @@ session  1.0264 3.0000 9.0000 0.4259
 ====================================
 
 
-Region 67 ANOVA:
+deg_region_67 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -603,7 +603,7 @@ session  1.0622 3.0000 9.0000 0.4123
 ====================================
 
 
-Region 68 ANOVA:
+deg_region_68 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -612,7 +612,7 @@ session  0.7246 3.0000 9.0000 0.5624
 ====================================
 
 
-Region 69 ANOVA:
+deg_region_69 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -621,7 +621,7 @@ session  1.5431 3.0000 9.0000 0.2695
 ====================================
 
 
-Region 70 ANOVA:
+deg_region_70 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -630,7 +630,7 @@ session  0.1218 3.0000 9.0000 0.9449
 ====================================
 
 
-Region 71 ANOVA:
+deg_region_71 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -639,7 +639,7 @@ session  0.4394 3.0000 9.0000 0.7304
 ====================================
 
 
-Region 72 ANOVA:
+deg_region_72 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -648,7 +648,7 @@ session  0.9573 3.0000 9.0000 0.4537
 ====================================
 
 
-Region 73 ANOVA:
+deg_region_73 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -657,7 +657,7 @@ session  0.2578 3.0000 9.0000 0.8540
 ====================================
 
 
-Region 74 ANOVA:
+deg_region_74 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -666,7 +666,7 @@ session  1.7449 3.0000 9.0000 0.2273
 ====================================
 
 
-Region 75 ANOVA:
+deg_region_75 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -675,7 +675,7 @@ session  3.3483 3.0000 9.0000 0.0693
 ====================================
 
 
-Region 76 ANOVA:
+deg_region_76 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -684,7 +684,7 @@ session  0.7985 3.0000 9.0000 0.5252
 ====================================
 
 
-Region 77 ANOVA:
+deg_region_77 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F
@@ -693,7 +693,7 @@ session  3.7195 3.0000 9.0000 0.0546
 ====================================
 
 
-Region 78 ANOVA:
+deg_region_78 ANOVA:
                Anova
 ====================================
         F Value Num DF Den DF Pr > F

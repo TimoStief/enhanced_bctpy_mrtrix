@@ -1,0 +1,31 @@
+{
+  "name": "global_basic_metrics_run",
+  "description": "Run 01_global_basic_metrics with explicit inputs",
+  "script": "../2_global_network_metrics/01_global_basic_metrics.py",
+  "inputs": {
+    "data_dir": "/data/local/129_PK01/derivatives/dsistudio_connectomics/connectivity",
+    "metadata_file": "/data/local/129_PK01/derivatives/bct/participants_5groups.tsv",
+    "atlas_name": "Brainnectome",
+    "n_nodes": 246,
+    "file_pattern": "{subject}_ses-{session}*/tracks_1000k_streamline/by_atlas/{atlas}/*.connectivity.mat",
+    "subject_col": "participant_id",
+    "session_col": "session",
+    "group_col": "group",
+    "sex_col": "sex",
+    "binarize": false,
+    "umap_n_neighbors": 15,
+    "umap_min_dist": 0.1,
+    "umap_metric": "euclidean",
+    "include_metrics": "all",
+    "exclude_metrics": []
+  },
+  "outputs": {
+    "output_dir": "/data/local/129_PK01/derivatives/bct/global_metrics",
+    "expected_files": [
+      "global_metrics.parquet",
+      "umap_coordinates.parquet",
+      "plots/metrics_by_group.png",
+      "plots/umap_trajectories.png"
+    ]
+  }
+}

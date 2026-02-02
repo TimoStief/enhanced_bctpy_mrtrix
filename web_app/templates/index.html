@@ -1,0 +1,688 @@
+{% extends "base.html" %}
+
+{% block title %}BCT Analysis - Home{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row gy-4">
+        <!-- Column 1: Input Settings -->
+        <div class="col-lg-4">
+            <div class="card feature-card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-folder-open me-2"></i>Input Settings</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Input Directory Selector -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Input Directory</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="inputDir" 
+                                   placeholder="/data/local/129_PK01/derivatives/dsistudio_connectomics/connectivity"
+                                   value="/data/local/129_PK01/derivatives/dsistudio_connectomics/connectivity">
+                            <button class="btn btn-success" type="button" id="validateInputBtn">
+                                <i class="fas fa-check me-1"></i>Validate
+                            </button>
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            Enter path and click Validate to scan for connectivity data
+                        </small>
+                        <div id="inputError" class="alert alert-danger d-none mt-2" role="alert"></div>
+                    </div>
+
+                    <!-- Session Detection -->
+                    <div id="sessionInfo" class="alert alert-info d-none" role="alert">
+                        <h6 class="mb-2"><i class="fas fa-check-circle me-2"></i>Sessions Found:</h6>
+                        <ul class="mb-0" id="sessionList"></ul>
+                    </div>
+
+                    <!-- Output Directory -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Output Directory</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="outputDir" placeholder="Optional: leave empty for auto (input_dir/bct_output)">
+                        </div>
+                        <small class="text-muted">Optional: leave empty for default location</small>
+                        <div id="outputError" class="alert alert-danger d-none mt-2" role="alert"></div>
+                    </div>
+
+                    <!-- Analysis Type -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Analysis Type</label>
+                        <select class="form-select" id="analysisType">
+                            <option value="full">Full Analysis (All Metrics)</option>
+                            <option value="analyze">Matrix Analysis Only</option>
+                        </select>
+                    </div>
+
+                    <!-- Output Format -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold"><i class="fas fa-file-export me-2"></i>Output Format</label>
+                        <select class="form-select" id="outputFormat">
+                            <option value="parquet" selected>Parquet (Recommended for R)</option>
+                            <option value="feather">Feather (Fast interop)</option>
+                            <option value="hdf5">HDF5 (Scientific data)</option>
+                            <option value="csv">CSV (Universal)</option>
+                            <option value="excel">Excel (.xlsx)</option>
+                        </select>
+                        <small class="text-muted d-block mt-2">
+                            Choose output format for analysis results. Parquet/Feather recommended for R analysis.
+                        </small>
+                    </div>
+
+                    <!-- DSI Studio Options -->
+                    <div class="mb-4" id="dsiOptionsSection" style="display: none;">
+                        <label class="form-label fw-bold"><i class="fas fa-brain me-2"></i>DSI Studio Options</label>
+                        <div class="card bg-light border-0">
+                            <div class="card-body p-3">
+                                <!-- Atlas Selection -->
+                                <div class="mb-3">
+                                    <label class="form-label small">Atlas Filter</label>
+                                    <select class="form-select form-select-sm" id="atlasFilter">
+                                        <option value="">All atlases</option>
+                                        <!-- Dynamically populated -->
+                                    </select>
+                                    <small class="text-muted" id="atlasCount"></small>
+                                </div>
+                                
+                                <!-- DSI Metric Selection -->
+                                <div class="mb-0">
+                                    <label class="form-label small">Connectivity Metric</label>
+                                    <select class="form-select form-select-sm" id="dsiMetric">
+                                        <option value="count">count</option>
+                                        <!-- Dynamically populated -->
+                                    </select>
+                                    <small class="text-muted" id="metricCount"></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Folder Info (shown after scan) -->
+                    <div class="mb-4" id="folderInfoSection" style="display: none;">
+                        <div class="alert alert-success mb-0">
+                            <h6 class="mb-2"><i class="fas fa-check-circle me-2"></i>Folder Scanned</h6>
+                            <ul class="mb-0 small" id="folderInfoList"></ul>
+                        </div>
+                    </div>
+
+                    <!-- Preprocessing Options -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold"><i class="fas fa-cogs me-2"></i>Preprocessing</label>
+                        <div class="card bg-light border-0">
+                            <div class="card-body p-3">
+                                <!-- Threshold -->
+                                <div class="mb-3">
+                                    <label class="form-label small">Threshold (optional)</label>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <input type="number" class="form-control form-control-sm" id="threshold" 
+                                                   placeholder="e.g., 0.1" step="0.01" min="0">
+                                        </div>
+                                        <div class="col-6">
+                                            <select class="form-select form-select-sm" id="thresholdType">
+                                                <option value="absolute">Absolute</option>
+                                                <option value="proportional">Proportional (%)</option>
+                                                <option value="density">Target density</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">Leave empty for no thresholding</small>
+                                </div>
+                                
+                                <!-- Normalize & Binarize -->
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="normalize">
+                                    <label class="form-check-label small" for="normalize">
+                                        Normalize weights (0-1 range)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="binarize">
+                                    <label class="form-check-label small" for="binarize">
+                                        Binarize matrix (0 or 1)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Metric Selection -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-chart-line me-2"></i>Select Metrics
+                        </label>
+                        <div class="card bg-light border-0">
+                            <div class="card-body p-3">
+                                <!-- Basic Properties -->
+                                <div class="mb-3">
+                                    <h6 class="mb-2 text-primary">
+                                        <i class="fas fa-circle-notch me-1"></i>Basic Properties
+                                    </h6>
+                                    <div class="form-check">
+                                        <input class="form-check-input metric-checkbox" type="checkbox" id="metric_degree" value="degree" checked>
+                                        <label class="form-check-label" for="metric_degree">Degree/Strength</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input metric-checkbox" type="checkbox" id="metric_density" value="density" checked>
+                                        <label class="form-check-label" for="metric_density">Density/Sparsity</label>
+                                    </div>
+                                </div>
+
+                                <!-- Clustering & Community -->
+                                <div class="mb-3">
+                                    <h6 class="mb-2 text-primary">
+                                        <i class="fas fa-cubes me-1"></i>Clustering & Community
+                                    </h6>
+                                    <div class="form-check">
+                                        <input class="form-check-input metric-checkbox" type="checkbox" id="metric_clustering" value="clustering" checked>
+                                        <label class="form-check-label" for="metric_clustering">Clustering Coefficient</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input metric-checkbox" type="checkbox" id="metric_modularity" value="modularity" checked>
+                                        <label class="form-check-label" for="metric_modularity">Modularity/Community</label>
+                                    </div>
+                                </div>
+
+                                <!-- Integration & Efficiency -->
+                                <div class="mb-3">
+                                    <h6 class="mb-2 text-primary">
+                                        <i class="fas fa-sitemap me-1"></i>Integration & Efficiency
+                                    </h6>
+                                    <div class="form-check">
+                                        <input class="form-check-input metric-checkbox" type="checkbox" id="metric_efficiency" value="efficiency" checked>
+                                        <label class="form-check-label" for="metric_efficiency">Global/Local Efficiency</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input metric-checkbox" type="checkbox" id="metric_path" value="path" checked>
+                                        <label class="form-check-label" for="metric_path">Path Length & Distance</label>
+                                    </div>
+                                </div>
+
+                                <!-- Centrality Measures -->
+                                <div class="mb-3">
+                                    <h6 class="mb-2 text-primary">
+                                        <i class="fas fa-star me-1"></i>Centrality Measures
+                                    </h6>
+                                    <div class="form-check">
+                                        <input class="form-check-input metric-checkbox" type="checkbox" id="metric_centrality" value="centrality" checked>
+                                        <label class="form-check-label" for="metric_centrality">Betweenness/Eigenvector/K-core</label>
+                                    </div>
+                                </div>
+
+                                <!-- Network Properties -->
+                                <div class="mb-3">
+                                    <h6 class="mb-2 text-primary">
+                                        <i class="fas fa-network-wired me-1"></i>Network Properties
+                                    </h6>
+                                    <div class="form-check">
+                                        <input class="form-check-input metric-checkbox" type="checkbox" id="metric_assortativity" value="assortativity">
+                                        <label class="form-check-label" for="metric_assortativity">Assortativity & Rich Club</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input metric-checkbox" type="checkbox" id="metric_smallworld" value="smallworld">
+                                        <label class="form-check-label" for="metric_smallworld">Small-world Properties</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input metric-checkbox" type="checkbox" id="metric_resilience" value="resilience">
+                                        <label class="form-check-label" for="metric_resilience">Resilience (Components)</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Start Button -->
+                    <button class="btn btn-success btn-lg w-100" id="startAnalysisBtn" disabled>
+                        <i class="fas fa-play me-2"></i>Start Analysis
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 2: Terminal Output -->
+        <div class="col-lg-8">
+            <div class="card feature-card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="fas fa-terminal me-2"></i>Analysis Terminal</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div id="terminalOutput" class="terminal-output">
+                        <div class="terminal-welcome">
+                            <p>Welcome to BCT Analysis Web Interface</p>
+                            <p>Select input directory and click "Start Analysis" to begin</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <span id="logStatus">Waiting for input...</span>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="row gy-4 mt-3" id="resultsSection" style="display: none;">
+        <div class="col-lg-12">
+            <div class="card feature-card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Analysis Results</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-value" id="totalMatrices">0</div>
+                                <div class="stat-label">Matrices Processed</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-value" id="sessionCount">0</div>
+                                <div class="stat-label">Sessions Found</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-value" id="subjectCount">0</div>
+                                <div class="stat-label">Subjects</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <a class="btn btn-outline-success btn-lg w-100" id="downloadResultsBtn" href="#">
+                                <i class="fas fa-download me-2"></i>Download Results
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let logUpdateInterval = null;
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded, setting up event listeners...');
+    setupEventListeners();
+    console.log('Event listeners configured');
+});
+
+function setupEventListeners() {
+    const validateBtn = document.getElementById('validateInputBtn');
+    const startBtn = document.getElementById('startAnalysisBtn');
+    const inputField = document.getElementById('inputDir');
+    
+    console.log('validateBtn:', validateBtn);
+    console.log('startBtn:', startBtn);
+    console.log('inputField:', inputField);
+    
+    if (validateBtn) {
+        validateBtn.addEventListener('click', () => {
+            console.log('Validate button clicked!');
+            pickFolder('input', false);
+        });
+    }
+    
+    if (inputField) {
+        inputField.addEventListener('input', updateStartButtonState);
+        inputField.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') pickFolder('input', false);
+        });
+    }
+    
+    if (startBtn) {
+        startBtn.addEventListener('click', startAnalysis);
+    }
+}
+
+async function pickFolder(type, usePicker = false) {
+    const inputElem = type === 'input' ? document.getElementById('inputDir') : document.getElementById('outputDir');
+    const errorElem = type === 'input' ? document.getElementById('inputError') : document.getElementById('outputError');
+    let path = inputElem.value.trim();
+
+    errorElem.classList.add('d-none');
+
+    if (usePicker) {
+        try {
+            const response = await fetch('/api/pick-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type })
+            });
+            const data = await response.json();
+            if (data.success && data.path) {
+                path = data.path;
+                inputElem.value = path;
+            } else {
+                if (data.message && data.message.includes('not')) {
+                    errorElem.textContent = data.message;
+                    errorElem.classList.remove('d-none');
+                }
+                return; // cancelled or unsupported
+            }
+        } catch (err) {
+            console.error('Picker error:', err);
+            errorElem.textContent = 'Picker unavailable; please paste a path and Validate.';
+            errorElem.classList.remove('d-none');
+            return;
+        }
+    }
+
+    if (!path) {
+        errorElem.textContent = 'Please enter a folder path';
+        errorElem.classList.remove('d-none');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/validate-path', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            inputElem.value = data.path;
+            if (type === 'input' && data.structure) {
+                // Show discovered structure
+                displayStructure(data.structure);
+            }
+            updateStartButtonState();
+        } else {
+            errorElem.textContent = data.error || 'Invalid path';
+            errorElem.classList.remove('d-none');
+        }
+    } catch (error) {
+        console.error('Error validating path:', error);
+        errorElem.textContent = 'Error validating path: ' + error.message;
+        errorElem.classList.remove('d-none');
+    }
+}
+
+function displayStructure(structure) {
+    const folderInfoSection = document.getElementById('folderInfoSection');
+    const folderInfoList = document.getElementById('folderInfoList');
+    const dsiOptionsSection = document.getElementById('dsiOptionsSection');
+    const atlasFilter = document.getElementById('atlasFilter');
+    
+    // Show structure info
+    const sessionsDisplay = structure.sessions.map(s => s.replace('ses-', '')).join(', ');
+    folderInfoList.innerHTML = `
+        <li><strong>${structure.subjects.length}</strong> subjects</li>
+        <li><strong>${structure.sessions.length}</strong> sessions: ${sessionsDisplay}</li>
+        <li><strong>${structure.atlases.length}</strong> atlases: ${structure.atlases.join(', ')}</li>
+        <li><strong>${structure.total_files}</strong> connectivity files</li>
+    `;
+    folderInfoSection.style.display = 'block';
+    
+    // Populate atlas filter
+    atlasFilter.innerHTML = '<option value="">All atlases</option>' +
+        structure.atlases.map(a => `<option value="${a}">${a}</option>`).join('');
+    
+    // Show DSI Studio options
+    if (structure.atlases.length > 0) {
+        dsiOptionsSection.style.display = 'block';
+    }
+}
+}
+    if (structure.atlases.length > 0) {
+        dsiOptionsSection.style.display = 'block';
+    }
+}
+
+async function checkSessions(path) {
+    try {
+        const response = await fetch('/api/check-sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path })
+        });
+        
+        const data = await response.json();
+        const sessionInfo = document.getElementById('sessionInfo');
+        const sessionList = document.getElementById('sessionList');
+        
+        if (data.has_sessions) {
+            sessionList.innerHTML = data.sessions
+                .map(s => `<li>${s.name}: ${s.files} file(s)</li>`)
+                .join('');
+            sessionInfo.classList.remove('d-none');
+        } else {
+            sessionInfo.classList.add('d-none');
+        }
+        
+        // Also scan for DSI Studio structure
+        await scanFolder(path);
+    } catch (error) {
+        console.error('Error checking sessions:', error);
+    }
+}
+
+async function scanFolder(path) {
+    try {
+        const response = await fetch('/api/scan-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path })
+        });
+        
+        const data = await response.json();
+        
+        const dsiSection = document.getElementById('dsiOptionsSection');
+        const folderInfo = document.getElementById('folderInfoSection');
+        const folderInfoList = document.getElementById('folderInfoList');
+        const atlasSelect = document.getElementById('atlasFilter');
+        const metricSelect = document.getElementById('dsiMetric');
+        
+        if (data.success) {
+            // Show folder info
+            folderInfo.style.display = 'block';
+            let infoHtml = '';
+            
+            if (data.structure_type === 'dsi_studio') {
+                // DSI Studio structure found - show options
+                dsiSection.style.display = 'block';
+                
+                // Populate atlas dropdown
+                atlasSelect.innerHTML = '<option value="">All atlases (' + data.atlases.length + ')</option>';
+                data.atlases.forEach(atlas => {
+                    atlasSelect.innerHTML += `<option value="${atlas}">${atlas}</option>`;
+                });
+                document.getElementById('atlasCount').textContent = `${data.atlases.length} atlases found`;
+                
+                // Populate metric dropdown
+                metricSelect.innerHTML = '';
+                data.metrics.forEach((metric, idx) => {
+                    const selected = metric === 'count' ? ' selected' : (idx === 0 && !data.metrics.includes('count') ? ' selected' : '');
+                    metricSelect.innerHTML += `<option value="${metric}"${selected}>${metric}</option>`;
+                });
+                document.getElementById('metricCount').textContent = `${data.metrics.length} metrics found`;
+                
+                // Folder info
+                infoHtml = `
+                    <li><strong>Type:</strong> DSI Studio BIDS</li>
+                    <li><strong>Subjects:</strong> ${data.subjects.length}</li>
+                    <li><strong>Sessions:</strong> ${data.sessions.join(', ')}</li>
+                    <li><strong>Atlases:</strong> ${data.atlases.length}</li>
+                    <li><strong>Metrics:</strong> ${data.metrics.length}</li>
+                    <li><strong>Total files:</strong> ${data.total_files}</li>
+                `;
+            } else {
+                // Standard structure - hide DSI options
+                dsiSection.style.display = 'none';
+                
+                infoHtml = `
+                    <li><strong>Type:</strong> Standard folder</li>
+                    <li><strong>Sessions:</strong> ${data.sessions.length > 0 ? data.sessions.join(', ') : 'None detected'}</li>
+                    <li><strong>File formats:</strong> ${data.file_formats.join(', ') || 'None found'}</li>
+                    <li><strong>Total files:</strong> ${data.total_files}</li>
+                `;
+            }
+            
+            folderInfoList.innerHTML = infoHtml;
+        } else {
+            dsiSection.style.display = 'none';
+            folderInfo.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error scanning folder:', error);
+    }
+}
+
+function updateStartButtonState() {
+    const inputDir = document.getElementById('inputDir').value.trim();
+    const startBtn = document.getElementById('startAnalysisBtn');
+    startBtn.disabled = !inputDir;
+}
+
+async function startAnalysis() {
+    const inputDir = document.getElementById('inputDir').value.trim();
+    const outputDir = document.getElementById('outputDir').value.trim();
+    const analysisType = document.getElementById('analysisType').value;
+    const outputFormat = document.getElementById('outputFormat').value;
+    
+    // DSI Studio options
+    const atlasFilter = document.getElementById('atlasFilter').value;
+    const dsiMetric = document.getElementById('dsiMetric').value;
+    
+    // Preprocessing options
+    const threshold = document.getElementById('threshold').value;
+    const thresholdType = document.getElementById('thresholdType').value;
+    const normalize = document.getElementById('normalize').checked;
+    const binarize = document.getElementById('binarize').checked;
+    
+    // Collect selected metrics
+    const selectedMetrics = Array.from(document.querySelectorAll('.metric-checkbox:checked'))
+        .map(cb => cb.value);
+    
+    if (!inputDir) {
+        alert('Please select an input directory');
+        return;
+    }
+    
+    if (selectedMetrics.length === 0) {
+        alert('Please select at least one metric to calculate');
+        return;
+    }
+    
+    // Clear terminal
+    document.getElementById('terminalOutput').innerHTML = '';
+    document.getElementById('startAnalysisBtn').disabled = true;
+    
+    try {
+        const response = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                input_dir: inputDir,
+                output_dir: outputDir,
+                analysis_type: analysisType,
+                selected_metrics: selectedMetrics,
+                output_format: outputFormat,
+                atlas_filter: atlasFilter,
+                dsi_metric: dsiMetric,
+                threshold: threshold || null,
+                threshold_type: thresholdType,
+                normalize: normalize,
+                binarize: binarize
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Start polling for logs
+            startLogUpdate();
+            
+            // Wait a bit then show results
+            setTimeout(() => {
+                showResults(data.summary);
+            }, 2000);
+        } else {
+            appendTerminalOutput(`❌ Error: ${data.error}`);
+        }
+    } catch (error) {
+        console.error('Analysis error:', error);
+        appendTerminalOutput(`❌ Error: ${error.message}`);
+    } finally {
+        document.getElementById('startAnalysisBtn').disabled = false;
+    }
+}
+
+function startLogUpdate() {
+    if (logUpdateInterval) clearInterval(logUpdateInterval);
+    
+    const updateLogs = async () => {
+        try {
+            const response = await fetch('/api/logs');
+            const data = await response.json();
+            
+            const terminal = document.getElementById('terminalOutput');
+            terminal.innerHTML = `<pre>${escapeHtml(data.logs)}</pre>`;
+            terminal.scrollTop = terminal.scrollHeight;
+            
+            document.getElementById('logStatus').textContent = `${data.lines} log lines`;
+        } catch (error) {
+            console.error('Error updating logs:', error);
+        }
+    };
+    
+    updateLogs();
+    logUpdateInterval = setInterval(updateLogs, 500);
+}
+
+function appendTerminalOutput(message) {
+    const terminal = document.getElementById('terminalOutput');
+    const pre = terminal.querySelector('pre');
+    if (!pre) {
+        terminal.innerHTML = '<pre></pre>';
+    }
+    terminal.querySelector('pre').textContent += message + '\n';
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+function showResults(summary) {
+    const resultsSection = document.getElementById('resultsSection');
+    
+    if (summary && summary.total_matrices > 0) {
+        document.getElementById('totalMatrices').textContent = summary.total_matrices;
+        document.getElementById('sessionCount').textContent = 
+            summary.sessions ? summary.sessions.length : (summary.sessions_processed ? summary.sessions_processed.length : 0);
+        document.getElementById('subjectCount').textContent = 
+            summary.subjects ? summary.subjects.length : 0;
+        
+        resultsSection.style.display = 'block';
+        
+        // Setup download button based on output format
+        const outputDir = document.getElementById('outputDir').value || document.getElementById('inputDir').value + '/bct_output';
+        const outputFormat = document.getElementById('outputFormat').value;
+        const extensions = {
+            'parquet': 'parquet',
+            'feather': 'feather',
+            'hdf5': 'h5',
+            'csv': 'csv',
+            'excel': 'xlsx'
+        };
+        const ext = extensions[outputFormat] || 'parquet';
+        document.getElementById('downloadResultsBtn').href = 
+            `/api/download/bct_analysis_results.${ext}?output_dir=${encodeURIComponent(outputDir)}`;
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

@@ -7,7 +7,7 @@ import bct
 
 # -------------------------------
 # Pfade & Sessions
-# -------------------------------
+
 # Get project root (one level up from scripts/)
 project_root = Path(__file__).resolve().parent.parent
 root = project_root / "Test_matrizen"

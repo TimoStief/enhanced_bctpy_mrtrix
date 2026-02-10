@@ -3,8 +3,8 @@
   "description": "Run 01_global_basic_metrics with explicit inputs",
   "script": "../2_global_network_metrics/01_global_basic_metrics.py",
   "inputs": {
-    "data_dir": "/data/local/129_PK01/derivatives/dsistudio_connectomics/connectivity",
-    "metadata_file": "/data/local/129_PK01/derivatives/bct/participants_5groups.tsv",
+    "data_dir": "C:/Users/timo-/Desktop/Forschung/data/connectivity",
+    "metadata_file": "C:/Users/timo-/Desktop/Forschung/data/participants_5groups.tsv",
     "atlas_name": "Brainnectome",
     "n_nodes": 246,
     "file_pattern": "{subject}_ses-{session}*/tracks_1000k_streamline/by_atlas/{atlas}/*.connectivity.mat",
@@ -20,7 +20,7 @@
     "exclude_metrics": []
   },
   "outputs": {
-    "output_dir": "/data/local/129_PK01/derivatives/bct/global_metrics",
+    "output_dir": "../outputs/global_metrics",
     "expected_files": [
       "global_metrics.parquet",
       "umap_coordinates.parquet",

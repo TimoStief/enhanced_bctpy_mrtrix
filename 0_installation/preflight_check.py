@@ -18,6 +18,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import os
 
 
 REQUIRED_PACKAGES = [
@@ -44,6 +45,7 @@ def load_spec(spec_path: Path) -> dict:
 
 
 def resolve_path(spec_dir: Path, raw_path: str) -> Path:
+    raw_path = os.path.expandvars(raw_path)
     path = Path(raw_path).expanduser()
     if not path.is_absolute():
         path = (spec_dir / path).resolve()

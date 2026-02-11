@@ -113,7 +113,7 @@ CONFIG = {
     "output_dir": Path("C:/Users/timo-/Desktop/Forschung/enhanced_bctpy_mrtrix/outputs/global_metrics"),
 
     # ---- DATA STRUCTURE ----
-    "n_nodes": 246,
+    "n_nodes": 78,
     "atlas_name": "Brodmann",
 
     # ---- FILE NAMING PATTERN ----

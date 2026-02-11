@@ -79,7 +79,10 @@ from sklearn.decomposition import PCA
 DATA_DIR = Path("/data/local/129_PK01/derivatives/dsistudio_connectomics/connectivity")
 BCT_DIR = Path("/data/local/129_PK01/derivatives/bct")
 OUTPUT_DIR = BCT_DIR / "comprehensive_analysis"
-OUTPUT_DIR.mkdir(exist_ok=True)
+from pathlib import Path
+OUTPUT_DIR = Path("C:/Users/timo-/Desktop/Forschung/enhanced_bctpy_mrtrix/outputs/global_metrics")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 ATLAS = "Brainnectome"
 N_NODES = 246
@@ -96,58 +99,58 @@ participants_file = BCT_DIR / "participants_5groups.tsv"
 participants_df = pd.read_csv(participants_file, sep='\t')
 print(f"Loaded {len(participants_df)} participant records")
 
+from pathlib import Path
+import pandas as pd
+
 # ============================================================================
-# CONFIGURATION - EDIT THIS SECTION FOR YOUR DATA
+# CONFIGURATION FOR WINDOWS TEST SETUP
 # ============================================================================
 
 CONFIG = {
     # ---- DATA LOCATIONS ----
-    "data_dir": Path("/data/local/129_PK01/derivatives/dsistudio_connectomics/connectivity"),
-    "metadata_file": Path("/data/local/129_PK01/derivatives/bct/participants_5groups.tsv"),
-    "output_dir": Path("/data/local/129_PK01/derivatives/bct/global_metrics"),
-    
+    "data_dir": Path("C:/Users/timo-/Desktop/Forschung/Test_matrizen"),
+    "metadata_file": Path("C:/Users/timo-/Desktop/Forschung/Test_matrizen/participant_laufstudie_master.tsv"),
+    "output_dir": Path("C:/Users/timo-/Desktop/Forschung/enhanced_bctpy_mrtrix/outputs/global_metrics"),
+
     # ---- DATA STRUCTURE ----
-    "n_nodes": 246,  # Number of brain regions in your atlas
-    "atlas_name": "Brainnectome",  # Name of your atlas
-    
+    "n_nodes": 246,
+    "atlas_name": "Brodmann",
+
     # ---- FILE NAMING PATTERN ----
-    # How to find connectivity files. Example patterns:
-    # "{subject}_ses-{session}*/tracks_1000k_streamline/by_atlas/{atlas}/*.connectivity.mat"
-    # "connectivity/{subject}/ses-{session}/connectogram.npy"
-    "file_pattern": "{subject}_ses-{session}*/tracks_1000k_streamline/by_atlas/{atlas}/*.connectivity.mat",
-    
+    # Hier deine .npy-Dateien korrekt referenzieren
+    "file_pattern": "ses-{session}/*{subject}*.npy",
+
     # ---- PARTICIPANTS METADATA ----
-    # Columns expected in metadata file:
     "subject_col": "participant_id",
     "session_col": "session",
     "group_col": "group",
     "sex_col": "sex",
-    
+
     # ---- PROCESSING OPTIONS ----
-    "binarize": False,  # Convert to binary (0/1) connectivity?
-    "weight_type": "weighted",  # 'weighted' or 'binary'
+    "binarize": False,
+    "weight_type": "weighted",
     "umap_n_neighbors": 15,
     "umap_min_dist": 0.1,
     "umap_metric": "euclidean",
-    "include_metrics": "all",  # or list of metric keys to compute
-    "exclude_metrics": [],  # list of metric keys to skip
+    "include_metrics": "all",
+    "exclude_metrics": [],
 }
 
 # ============================================================================
 # INITIALIZE
 # ============================================================================
 
-# Create output directory
+# Create output directory if it doesn't exist
 CONFIG["output_dir"].mkdir(parents=True, exist_ok=True)
 
-print("="*75)
+print("=" * 75)
 print("GLOBAL NETWORK METRICS ANALYSIS")
-print("="*75)
+print("=" * 75)
 print(f"Data directory:      {CONFIG['data_dir']}")
 print(f"Metadata file:       {CONFIG['metadata_file']}")
 print(f"Output directory:    {CONFIG['output_dir']}")
 print(f"Atlas:               {CONFIG['atlas_name']} ({CONFIG['n_nodes']} nodes)")
-print("="*75)
+print("=" * 75)
 print()
 
 # ============================================================================
@@ -162,6 +165,7 @@ metadata = pd.read_csv(CONFIG["metadata_file"], sep='\t')
 print(f"✓ Loaded {len(metadata)} records")
 print(f"  Columns: {list(metadata.columns)}")
 print()
+
 
 # ============================================================================
 # HELPER FUNCTIONS

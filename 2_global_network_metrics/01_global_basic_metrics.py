@@ -76,22 +76,29 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
 # ======================== CONFIGURATION ========================
-DATA_DIR = Path("/data/local/129_PK01/derivatives/dsistudio_connectomics/connectivity")
-BCT_DIR = Path("/data/local/129_PK01/derivatives/bct")
-OUTPUT_DIR = BCT_DIR / "comprehensive_analysis"
 from pathlib import Path
+
+# ---- DATA LOCATIONS ----
+DATA_DIR = Path("C:/Users/timo-/Desktop/Forschung/Test_matrizen")
+PARTICIPANTS_FILE = Path("C:/Users/timo-/Desktop/Forschung/Test_matrizen/participant_laufstudie_master.tsv")
 OUTPUT_DIR = Path("C:/Users/timo-/Desktop/Forschung/enhanced_bctpy_mrtrix/outputs/global_metrics")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)  # falls Ordner nicht existiert
 
+# ---- ATLAS / NETWORK ----
+ATLAS = "Brodmann"
+N_NODES = 78
 
-ATLAS = "Brainnectome"
-N_NODES = 246
-
+# ---- PRINT INFO ----
 print("="*70)
 print("COMPREHENSIVE ANALYSIS: METRICS + UMAP + TRAJECTORIES")
 print("="*70)
-print(f"Output directory: {OUTPUT_DIR}")
+print(f"Data directory:      {DATA_DIR}")
+print(f"Metadata file:       {PARTICIPANTS_FILE}")
+print(f"Output directory:    {OUTPUT_DIR}")
+print(f"Atlas:               {ATLAS} ({N_NODES} nodes)")
+print("="*70)
 print()
+
 
 # ======================== LOAD DATA ========================
 print("Loading participant metadata...")

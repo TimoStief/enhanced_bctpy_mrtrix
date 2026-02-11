@@ -7,7 +7,7 @@
     "data_dir": "C:/Users/timo-/Desktop/Forschung/Test_matrizen",
     "metadata_file": "C:/Users/timo-/Desktop/Forschung/Test_matrizen/participant_laufstudie_master.tsv",
 
-    "atlas_name": "Brainnectome",
+    "atlas_name": "Brodmann",
     "n_nodes": 246,
 
     "file_pattern": "ses-{session}/*{subject}*.npy",

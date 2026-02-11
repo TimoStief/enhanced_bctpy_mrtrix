@@ -100,14 +100,15 @@ print("="*70)
 print()
 
 
-# ======================== LOAD DATA ========================
+# ---------------- LOAD METADATA ----------------
 print("Loading participant metadata...")
-participants_file = BCT_DIR / "participants_5groups.tsv"
-participants_df = pd.read_csv(participants_file, sep='\t')
-print(f"Loaded {len(participants_df)} participant records")
+if not PARTICIPANTS_FILE.exists():
+    raise FileNotFoundError(f"Metadata file not found: {PARTICIPANTS_FILE}")
 
-from pathlib import Path
-import pandas as pd
+metadata = pd.read_csv(PARTICIPANTS_FILE, sep='\t')
+print(f"✓ Loaded {len(metadata)} records")
+print(f"  Columns: {list(metadata.columns)}")
+print()
 
 # ============================================================================
 # CONFIGURATION FOR WINDOWS TEST SETUP

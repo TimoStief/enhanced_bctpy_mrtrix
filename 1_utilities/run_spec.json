@@ -10,7 +10,7 @@
     "atlas_name": "Brodmann",
     "n_nodes": 246,
 
-    "file_pattern": "ses-{session}/*{subject}*.npy",
+    "file_pattern": "ses-{session}/*{subject}*Brodmann*.npy",
 
     "subject_col": "participant_id",
     "session_col": "session",

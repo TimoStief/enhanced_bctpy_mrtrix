@@ -35,19 +35,32 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # ======================== CONFIGURATION ========================
-BCT_DIR = Path("/data/local/129_PK01/derivatives/bct")
-NODE_ANALYSIS_DIR = BCT_DIR / "node_level_analysis"
-OUTPUT_DIR = BCT_DIR / "node_comprehensive_analysis"
-OUTPUT_DIR.mkdir(exist_ok=True)
+# ======================== CONFIGURATION ========================
 
-ATLAS = "Brainnectome"
-N_NODES = 246
+from pathlib import Path
+
+DATA_DIR = Path("C:/Users/timo-/Desktop/Forschung/Test_matrizen")
+OUTPUT_DIR = Path("C:/Users/timo-/Desktop/Forschung/enhanced_bctpy_mrtrix/outputs/nodal_change")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+ATLAS = "Brodmann"
+N_NODES = 78
+
+SESSIONS = [1, 2, 3, 4]
+
+METRICS = [
+    "degree",
+    "strength",
+    "richness"
+]
 
 print("="*70)
-print("NODE-LEVEL COMPREHENSIVE MULTIVARIATE ANALYSIS")
+print("NODAL LONGITUDINAL CHANGE ANALYSIS")
 print("="*70)
+print(f"Atlas: {ATLAS} ({N_NODES} nodes)")
 print(f"Output: {OUTPUT_DIR}")
 print()
+
 
 # ======================== LOAD DATA ========================
 print("Loading node-level data...")

@@ -2,23 +2,31 @@
   "name": "global_basic_metrics_run",
   "description": "Run 01_global_basic_metrics with explicit inputs",
   "script": "../2_global_network_metrics/01_global_basic_metrics.py",
+
   "inputs": {
-    "data_dir": "C:/Users/timo-/Desktop/Forschung/data/connectivity",
-    "metadata_file": "C:/Users/timo-/Desktop/Forschung/data/participants_5groups.tsv",
+    "data_dir": "C:/Users/timo-/Desktop/Forschung/Test_matrizen",
+    "metadata_file": "C:/Users/timo-/Desktop/Forschung/Test_matrizen/participant_laufstudie_master.tsv",
+
     "atlas_name": "Brainnectome",
     "n_nodes": 246,
-    "file_pattern": "{subject}_ses-{session}*/tracks_1000k_streamline/by_atlas/{atlas}/*.connectivity.mat",
+
+    "file_pattern": "ses-{session}/*{subject}*.npy",
+
     "subject_col": "participant_id",
     "session_col": "session",
     "group_col": "group",
     "sex_col": "sex",
+
     "binarize": false,
+
     "umap_n_neighbors": 15,
     "umap_min_dist": 0.1,
     "umap_metric": "euclidean",
+
     "include_metrics": "all",
     "exclude_metrics": []
   },
+
   "outputs": {
     "output_dir": "../outputs/global_metrics",
     "expected_files": [

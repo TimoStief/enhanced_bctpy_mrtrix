@@ -79,15 +79,33 @@ from sklearn.decomposition import PCA
 from pathlib import Path
 
 # ---- DATA LOCATIONS ----
-DATA_DIR = Path("C:/Users/timo-/Desktop/Forschung/Test_matrizen")
-PARTICIPANTS_FILE = Path("C:/Users/timo-/Desktop/Forschung/Test_matrizen/participant_laufstudie_master.tsv")
-OUTPUT_DIR = Path("C:/Users/timo-/Desktop/Forschung/enhanced_bctpy_mrtrix/outputs/global_metrics")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)  # falls Ordner nicht existiert
+DATA_DIR = Path(r"G:/karl/connectivity")
 
 # ---- ATLAS / NETWORK ----
-ATLAS = "Brodmann"
-N_NODES = 78
+ATLAS = "Brainnectome"
+N_NODES = 246   # Brainnectome-Standard (anpassen, falls reduziert!)
 
+CONFIG = {
+    "data_dir": DATA_DIR,
+    "output_dir": OUTPUT_DIR,
+
+    "n_nodes": N_NODES,
+    "atlas_name": ATLAS,
+
+    # WICHTIG: DSI Studio Struktur
+    "file_pattern": (
+        "sub-{subject}_ses-{session}.*"
+        "/tracks_1000k_streamline/by_atlas/"
+        "{atlas}/*.connectivity.mat"
+    ),
+
+    "subject_col": "participant_id",
+    "session_col": "session",
+    "group_col": "group",
+    "sex_col": "sex",
+
+    "binarize": False,
+}
 # ---- PRINT INFO ----
 print("="*70)
 print("COMPREHENSIVE ANALYSIS: METRICS + UMAP + TRAJECTORIES")

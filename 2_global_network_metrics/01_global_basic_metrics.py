@@ -196,65 +196,40 @@ print()
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+from scipy.io import loadmat
 
-def load_connectivity_matrix(subject: str, session: str) -> np.ndarray:
+def load_connectivity_matrix(subject: str, session: str) -> np.ndarray | None:
     """
-    Load connectivity matrix for a subject and session.
-    
-    PARAMETERS:
-        subject (str): Subject identifier (e.g., "119BPAF161001")
-        session (str): Session number (e.g., "1", "2", "3")
-    
-    RETURNS:
-        np.ndarray: Connectivity matrix (N×N), or None if not found
-    
-    NOTES:
-        - Handles both .mat and .npy formats
-        - Validates matrix shape matches N_NODES
-        - Returns None if file not found or invalid
+    Load Brainnectome connectivity matrix from DSI Studio output.
     """
-    if not subject.startswith('sub-'):
-        subject = f'sub-{subject}'
-    
-    # Format the search pattern
+    if not subject.startswith("sub-"):
+        subject = f"sub-{subject}"
+
     pattern = CONFIG["file_pattern"].format(
-        subject=subject,
+        subject=subject.replace("sub-", ""),
         session=session,
         atlas=CONFIG["atlas_name"]
     )
-    
+
     matches = list(CONFIG["data_dir"].glob(pattern))
+
     if not matches:
+        print(f"  ⚠ No file found for {subject} ses-{session}")
         return None
-    
+
     try:
-        filepath = matches[0]
-        
-        # Load based on file extension
-        if filepath.suffix == '.mat':
-            mat_data = loadmat(filepath)
-            if 'connectivity' in mat_data:
-                A = mat_data['connectivity']
-            else:
-                keys = [k for k in mat_data.keys() if not k.startswith('__')]
-                A = mat_data[keys[0]] if keys else None
-        elif filepath.suffix == '.npy':
-            A = np.load(filepath)
-        else:
+        mat = loadmat(matches[0])
+        keys = [k for k in mat.keys() if not k.startswith("__")]
+        A = mat["connectivity"] if "connectivity" in mat else mat[keys[0]]
+
+        A = np.asarray(A, dtype=float)
+
+        if A.shape != (CONFIG["n_nodes"], CONFIG["n_nodes"]):
+            print(f"  ⚠ Shape mismatch {A.shape} for {subject} ses-{session}")
             return None
-        
-        if A is None:
-            return None
-        
-        A = np.array(A, dtype=float)
-        
-        # Validate shape
-        if A.shape[0] != CONFIG["n_nodes"] or A.shape[1] != CONFIG["n_nodes"]:
-            print(f"  ⚠ Invalid shape for {subject} ses-{session}: {A.shape}")
-            return None
-        
+
         return A
-    
+
     except Exception as e:
         print(f"  ⚠ Error loading {subject} ses-{session}: {e}")
         return None
@@ -561,7 +536,22 @@ def load_connectivity_matrix(subject, session, atlas=ATLAS):
         return A
     except Exception as e:
         return None
+# =====================================================================
+# TEST LOAD (DEBUG – MUSS VOR DER ANALYSE LAUFEN)
+# =====================================================================
 
+print("\n🔍 TEST: loading one connectivity matrix...")
+
+test_A = load_connectivity_matrix("1291003", "1")
+
+if test_A is not None:
+    print("Test load successful")
+    print("Shape:", test_A.shape)
+    print("Min / Max:", np.min(test_A), np.max(test_A))
+else:
+    print("Test load failed – check path or pattern")
+
+print("============================================================\n")
 
 def compute_small_worldness(A):
     """

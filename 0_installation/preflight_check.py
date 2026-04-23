@@ -74,6 +74,12 @@ def main() -> None:
 
     spec_path = Path(args.run_spec).expanduser().resolve()
     spec = load_spec(spec_path)
+
+    venv_python = spec.get("venv_python")
+    if venv_python and Path(sys.executable).resolve() != Path(venv_python).resolve():
+        print(f"✗ Wrong Python: {sys.executable}\n  Run with: {venv_python}", file=sys.stderr)
+        sys.exit(3)
+
     spec_dir = Path(spec["_spec_dir"]).resolve()
 
     script_path = resolve_path(spec_dir, spec.get("script", ""))

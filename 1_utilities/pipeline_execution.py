@@ -29,7 +29,7 @@ DESCRIPTION = "Wrapper to run a specific analysis script with logging"
 
 # Analysis parameters
 PARAMETERS = {
-    "script_to_run": "01_global_basic_metrics.py",
+    "script_to_run": "global_basic_metrics.py",
     "run_spec": "(required CLI arg)",
 }
 

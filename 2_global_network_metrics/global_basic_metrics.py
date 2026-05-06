@@ -10,8 +10,8 @@ PURPOSE:
     automatically detected from the data.
 
 USAGE:
-    python 01_global_basic_metrics.py run_spec.json
-    python 01_global_basic_metrics.py --data-dir /path/to/data --metadata /path/to/meta.tsv --output-dir /path/to/out
+    python global_basic_metrics.py run_spec.json
+    python global_basic_metrics.py --data-dir /path/to/data --metadata /path/to/meta.tsv --output-dir /path/to/out
 
 AUTHOR: Analysis Pipeline
 VERSION: 3.0 (Auto-detection, run_spec driven)

@@ -1,380 +1,546 @@
+#!/usr/bin/env python3
 """
-Node-Level Brain Network Analysis with Hub Identification
-=========================================================
+SCRIPT: Node-Level Brain Network Analysis
+==========================================
 
-Computes comprehensive node-level metrics for all 246 Brainnectome regions:
-- Node strength, degree, betweenness centrality
-- Participation coefficient (connector hub measure)
-- Within-module z-score (provincial hub measure)
-- Hub classification (provincial, connector, kinless, peripheral)
-- Rich-club coefficient
-- Node-level temporal trajectories
-- Regional intervention effects
+PURPOSE:
+    Compute node-level network metrics from connectivity matrices.
+    Input/output paths are provided via run_spec.json or CLI arguments.
+    All other parameters (n_nodes, atlas, file_format, columns) are
+    automatically detected from the data.
 
-Author: Analysis Pipeline
-Date: January 2026
+USAGE:
+    python 02_nodal_metrics.py run_spec.json
+    python 02_nodal_metrics.py --data-dir /path/to/data --metadata /path/to/meta.tsv --output-dir /path/to/out
+
+AUTHOR: Analysis Pipeline
+VERSION: 1.0 (Auto-detection, run_spec driven)
 """
 
+from __future__ import annotations
+
+import argparse
+import json
 import os
+import sys
+import warnings
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+
+warnings.filterwarnings("ignore")
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 import bct
-from scipy import stats
 from scipy.io import loadmat
-from pathlib import Path
-import warnings
-warnings.filterwarnings('ignore')
 
-# -------------------------------
-# Configuration
-# -------------------------------
-DATA_DIR = Path("/data/local/129_PK01/derivatives/dsistudio_connectomics/connectivity")
-BCT_DIR = Path("/data/local/129_PK01/derivatives/bct")
-OUTPUT_DIR = BCT_DIR / "node_level_analysis"
-OUTPUT_DIR.mkdir(exist_ok=True)
-
-# Hub classification thresholds (standard from literature)
-PROVINCIAL_HUB_THRESHOLD = 2.5  # within-module z-score
-CONNECTOR_HUB_THRESHOLD = 0.30   # participation coefficient
-KINLESS_HUB_THRESHOLD = 0.05     # low participation
-
-ATLAS = "Brainnectome"
-N_NODES = 246
-
-print("="*70)
-print("NODE-LEVEL BRAIN NETWORK ANALYSIS")
-print("="*70)
-print(f"Atlas: {ATLAS} ({N_NODES} nodes)")
-print(f"Output directory: {OUTPUT_DIR}")
-print()
-
-# -------------------------------
-# Load Participants Metadata
-# -------------------------------
-print("Loading participant metadata...")
-participants_file = BCT_DIR / "participants_5groups.tsv"
-if not participants_file.exists():
-    raise FileNotFoundError(f"Participants file not found: {participants_file}")
-
-participants_df = pd.read_csv(participants_file, sep='\t')
-print(f"Loaded {len(participants_df)} participant records")
-print(f"Groups: {participants_df['group'].value_counts().to_dict()}")
-print()
-
-# -------------------------------
-# Helper Functions
-# -------------------------------
-
-def load_connectivity_matrix(subject, session, atlas=ATLAS):
-    """Load connectivity matrix for a subject/session/atlas
-    
-    Args:
-        subject: Subject ID (e.g., 'sub-1291003' or '1291003')
-        session: Session number (1, 2, 3)
-        atlas: Atlas name
-    """
-    # Ensure subject has 'sub-' prefix
-    if not subject.startswith('sub-'):
-        subject = f'sub-{subject}'
-    
-    # DSI Studio path structure: sub-{subject}_ses-{session}.../*.mat
-    pattern = f"{subject}_ses-{session}*/tracks_1000k_streamline/by_atlas/{atlas}/*.connectivity.mat"
-    matches = list(DATA_DIR.glob(pattern))
-    
-    if not matches:
-        return None
-    
-    # Use the first match
-    matrix_path = matches[0]
-    try:
-        mat_data = loadmat(matrix_path)
-        # DSI Studio saves matrix as 'connectivity'
-        if 'connectivity' in mat_data:
-            A = mat_data['connectivity']
-        else:
-            # Try other possible keys
-            keys = [k for k in mat_data.keys() if not k.startswith('__')]
-            if keys:
-                A = mat_data[keys[0]]
-            else:
-                return None
-        
-        A = np.array(A, dtype=float)
-        
-        if A.shape[0] != N_NODES or A.shape[1] != N_NODES:
-            print(f"Warning: Matrix shape mismatch for {subject} ses-{session}: {A.shape}")
-            return None
-        return A
-    except Exception as e:
-        print(f"Error loading matrix for {subject} ses-{session}: {e}")
-        return None
+# Hub classification thresholds (Guimerà & Amaral 2005)
+PROVINCIAL_HUB_THRESHOLD = 2.5
+CONNECTOR_HUB_THRESHOLD  = 0.30
+KINLESS_HUB_THRESHOLD    = 0.05
 
 
-def compute_node_metrics(A):
-    """
-    Compute comprehensive node-level metrics
-    
-    Returns dict with:
-    - degree: node degree
-    - strength: node strength (weighted degree)
-    - betweenness: betweenness centrality
-    - clustering: clustering coefficient
-    - local_efficiency: local efficiency
-    - participation_coef: participation coefficient
-    - within_module_zscore: within-module degree z-score
-    - hub_type: hub classification
-    """
-    metrics = {}
-    
-    # Ensure float type
-    A = np.array(A, dtype=float)
-    A_bin = (A > 0).astype(int)
-    
-    # Degree and strength
-    metrics['degree'] = bct.degrees_und(A_bin)
-    metrics['strength'] = bct.strengths_und(A)
-    
-    # Clustering coefficient
-    try:
-        metrics['clustering'] = bct.clustering_coef_wu(A)
-    except:
-        metrics['clustering'] = np.full(N_NODES, np.nan)
-    
-    # Local efficiency
-    try:
-        metrics['local_efficiency'] = bct.efficiency_wei(A, local=True)
-    except:
-        metrics['local_efficiency'] = np.full(N_NODES, np.nan)
-    
-    # Betweenness centrality (computationally expensive)
-    try:
-        metrics['betweenness'] = bct.betweenness_wei(A)
-    except:
-        metrics['betweenness'] = np.full(N_NODES, np.nan)
-    
-    # Community detection for hub metrics
-    try:
-        Ci, Q = bct.community_louvain(A)
-        metrics['community'] = Ci
-        metrics['modularity'] = Q
-        
-        # Participation coefficient (connector hub measure)
-        metrics['participation_coef'] = bct.participation_coef(A, Ci)
-        
-        # Within-module degree z-score (provincial hub measure)
-        metrics['within_module_zscore'] = bct.module_degree_zscore(A, Ci)
-        
-        # Hub classification
-        metrics['hub_type'] = classify_hubs(
-            metrics['participation_coef'],
-            metrics['within_module_zscore']
+# ============================================================================
+# CLI / run_spec LOADING
+# ============================================================================
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Node-level network metrics analysis. Pass run_spec.json or explicit paths."
+    )
+    parser.add_argument("run_spec", nargs="?", help="Path to run_spec.json")
+    parser.add_argument("--data-dir",   help="Directory with connectivity matrices")
+    parser.add_argument("--metadata",   help="Participant metadata file (CSV or TSV)")
+    parser.add_argument("--output-dir", help="Output directory")
+    parser.add_argument("--binarize", action="store_true", default=None,
+                        help="Binarize connectivity matrices before analysis")
+    return parser.parse_args()
+
+
+def load_config(args: argparse.Namespace) -> dict:
+    """Build config from run_spec.json and/or CLI args. CLI args override run_spec."""
+    config: dict = {}
+
+    if args.run_spec:
+        spec_path = Path(args.run_spec).expanduser().resolve()
+        if not spec_path.exists():
+            sys.exit(f"✗ run_spec not found: {spec_path}")
+        with open(spec_path, "r", encoding="utf-8") as f:
+            spec = json.load(f)
+
+        inputs  = spec.get("inputs", {})
+        outputs = spec.get("outputs", {})
+        config["data_dir"]      = inputs.get("data_dir")
+        config["metadata_file"] = inputs.get("metadata_file")
+        config["output_dir"]    = outputs.get("output_dir")
+        config["binarize"]      = spec.get("binarize", False)
+
+    if args.data_dir:    config["data_dir"]      = args.data_dir
+    if args.metadata:    config["metadata_file"] = args.metadata
+    if args.output_dir:  config["output_dir"]    = args.output_dir
+    if args.binarize is not None:
+        config["binarize"] = args.binarize
+
+    missing = [k for k in ("data_dir", "metadata_file", "output_dir") if not config.get(k)]
+    if missing:
+        sys.exit(
+            f"✗ Missing required config: {', '.join(missing)}\n"
+            "  Provide via run_spec.json or CLI flags (--data-dir, --metadata, --output-dir)"
         )
-        
+
+    config["data_dir"]      = Path(config["data_dir"]).expanduser().resolve()
+    config["metadata_file"] = Path(config["metadata_file"]).expanduser().resolve()
+    config["output_dir"]    = Path(config["output_dir"]).expanduser().resolve()
+    config.setdefault("binarize", False)
+    return config
+
+
+# ============================================================================
+# AUTO-DETECTION  (same helpers as global script)
+# ============================================================================
+
+def detect_metadata_columns(metadata: pd.DataFrame) -> dict:
+    """Fuzzy-match column names for subject, session, group, sex."""
+    cols = {c.lower(): c for c in metadata.columns}
+
+    def find(candidates):
+        for c in candidates:
+            if c in cols:
+                return cols[c]
+        for c in candidates:
+            for col_lower, col_orig in cols.items():
+                if c in col_lower:
+                    return col_orig
+        return None
+
+    detected = {
+        "subject_col": find(["participant_id", "subject_id", "subject", "participant", "id"]),
+        "session_col": find(["session", "ses", "timepoint", "visit"]),
+        "group_col":   find(["group", "condition", "arm", "intervention"]),
+        "sex_col":     find(["sex", "gender"]),
+    }
+
+    print("  Auto-detected metadata columns:")
+    for k, v in detected.items():
+        print(f"    {k}: {'✓ ' + v if v else '⚠ not found'}")
+
+    missing = [k for k, v in detected.items() if v is None and k in ("subject_col", "session_col")]
+    if missing:
+        sys.exit(f"✗ Could not detect required columns: {missing}\n"
+                 f"  Available columns: {list(metadata.columns)}")
+    return detected
+
+
+def detect_file_format(data_dir: Path) -> str:
+    """Scan data_dir for matrix files. Returns 'npy' or 'mat'."""
+    npy_files = list(data_dir.rglob("*.npy"))
+    mat_files = list(data_dir.rglob("*.connectivity.mat")) or list(data_dir.rglob("*.mat"))
+
+    if not npy_files and not mat_files:
+        sys.exit(f"✗ No .npy or .mat files found in: {data_dir}")
+
+    if len(npy_files) >= len(mat_files):
+        print(f"  ✓ File format detected: .npy ({len(npy_files)} files)")
+        return "npy"
+    print(f"  ✓ File format detected: .mat ({len(mat_files)} files)")
+    return "mat"
+
+
+def detect_n_nodes(data_dir: Path, fmt: str) -> int:
+    """Load first matrix found and return its node count."""
+    files = list(data_dir.rglob("*.npy" if fmt == "npy" else "*.mat"))
+    if not files:
+        sys.exit(f"✗ No {fmt} files found in: {data_dir}")
+    try:
+        A = _load_matrix_raw(files[0], fmt)
+        if A is not None:
+            print(f"  ✓ n_nodes detected: {A.shape[0]}")
+            return A.shape[0]
     except Exception as e:
-        print(f"  Warning: Community detection failed: {e}")
-        metrics['community'] = np.full(N_NODES, np.nan)
-        metrics['modularity'] = np.nan
-        metrics['participation_coef'] = np.full(N_NODES, np.nan)
-        metrics['within_module_zscore'] = np.full(N_NODES, np.nan)
-        metrics['hub_type'] = np.full(N_NODES, 'unknown')
-    
-    return metrics
+        sys.exit(f"✗ Could not load matrix for node detection: {e}")
+    sys.exit("✗ Could not detect n_nodes from data")
 
 
-def classify_hubs(participation_coef, within_module_zscore):
+def detect_atlas_name(data_dir: Path) -> str:
+    """Try to extract atlas name from folder structure or filenames."""
+    known      = ["brainnectome", "brodmann", "aal", "schaefer", "destrieux", "desikan", "hcp"]
+    search_str = str(data_dir).lower()
+    for name in known:
+        if name in search_str:
+            print(f"  ✓ Atlas detected: {name.capitalize()} (from path)")
+            return name.capitalize()
+    for f in data_dir.rglob("*.*"):
+        fname = f.name.lower()
+        for name in known:
+            if name in fname:
+                print(f"  ✓ Atlas detected: {name.capitalize()} (from filename)")
+                return name.capitalize()
+    print("  ⚠ Atlas name not detected, using 'Unknown'")
+    return "Unknown"
+
+
+def detect_sessions(metadata: pd.DataFrame, session_col: str) -> list:
+    sessions = sorted(metadata[session_col].dropna().unique().tolist())
+    print(f"  ✓ Sessions detected: {sessions}")
+    return sessions
+
+
+# ============================================================================
+# MATRIX LOADING
+# ============================================================================
+
+def _load_matrix_raw(filepath: Path, fmt: str) -> np.ndarray | None:
+    try:
+        if fmt == "npy":
+            A = np.load(filepath)
+        else:
+            mat  = loadmat(filepath)
+            keys = [k for k in mat.keys() if not k.startswith("__")]
+            A    = mat.get("connectivity", mat[keys[0]] if keys else None)
+            if A is None:
+                return None
+        return np.asarray(A, dtype=float)
+    except Exception:
+        return None
+
+
+def find_matrix_file(data_dir: Path, subject: str, session: str, fmt: str) -> Path | None:
+    subj_clean    = subject.replace("sub-", "")
+    subj_prefixed = f"sub-{subj_clean}"
+    ses_clean     = str(session).replace("ses-", "")
+
+    patterns = [
+        f"*{subj_clean}*ses*{ses_clean}*.{fmt}",
+        f"*{subj_prefixed}*ses*{ses_clean}*.{fmt}",
+        f"ses-{ses_clean}/*{subj_clean}*.{fmt}",
+        f"ses-{ses_clean}/*{subj_prefixed}*.{fmt}",
+        f"*{subj_clean}*{ses_clean}*.{fmt}",
+        f"**/*{subj_clean}*{ses_clean}*.{fmt}",
+    ]
+    for pattern in patterns:
+        matches = list(data_dir.glob(pattern))
+        if matches:
+            return matches[0]
+
+    if fmt == "mat":
+        for pattern in [
+            f"*{subj_clean}*ses*{ses_clean}*.connectivity.mat",
+            f"**/*{subj_clean}*{ses_clean}*.connectivity.mat",
+        ]:
+            matches = list(data_dir.glob(pattern))
+            if matches:
+                return matches[0]
+    return None
+
+
+def load_connectivity_matrix(data_dir: Path, subject: str, session: str,
+                              fmt: str, n_nodes: int) -> np.ndarray | None:
+    filepath = find_matrix_file(data_dir, subject, session, fmt)
+    if filepath is None:
+        return None
+    A = _load_matrix_raw(filepath, fmt)
+    if A is None:
+        return None
+    if A.shape != (n_nodes, n_nodes):
+        print(f"  ⚠ Shape mismatch for {subject} ses-{session}: {A.shape} (expected {n_nodes}×{n_nodes})")
+        return None
+    return A
+
+
+# ============================================================================
+# NODE-LEVEL METRICS
+# ============================================================================
+
+def classify_hubs(participation_coef: np.ndarray,
+                  within_module_zscore: np.ndarray) -> np.ndarray:
     """
-    Classify nodes into hub types based on Guimerà & Amaral (2005)
-    
-    Hub types:
-    - provincial_hub: High within-module z-score, low participation
-    - connector_hub: High participation, moderate within-module z-score
-    - kinless_node: Low on both (non-hub connector)
-    - peripheral: Low on both (standard node)
+    Classify nodes into hub types (Guimerà & Amaral 2005).
+    Returns array of strings: provincial_hub | connector_hub | kinless_node | peripheral | unknown
     """
     hub_types = []
-    
     for pc, wz in zip(participation_coef, within_module_zscore):
         if np.isnan(pc) or np.isnan(wz):
-            hub_types.append('unknown')
+            hub_types.append("unknown")
         elif wz > PROVINCIAL_HUB_THRESHOLD and pc < CONNECTOR_HUB_THRESHOLD:
-            hub_types.append('provincial_hub')
+            hub_types.append("provincial_hub")
         elif pc > CONNECTOR_HUB_THRESHOLD and wz > 1.0:
-            hub_types.append('connector_hub')
+            hub_types.append("connector_hub")
         elif pc < KINLESS_HUB_THRESHOLD and wz < 1.0:
-            hub_types.append('peripheral')
+            hub_types.append("peripheral")
         else:
-            hub_types.append('kinless_node')
-    
+            hub_types.append("kinless_node")
     return np.array(hub_types)
 
 
-def compute_rich_club(A):
-    """Compute rich-club coefficient across degree thresholds"""
+def compute_node_metrics(A: np.ndarray, n_nodes: int, binarize: bool = False) -> dict:
+    """
+    Compute comprehensive node-level metrics for a connectivity matrix.
+
+    Returns dict with arrays of length n_nodes plus scalar modularity.
+    """
+    nan_vec = lambda: np.full(n_nodes, np.nan)
+
+    if binarize:
+        A = (A > 0).astype(float)
+    A_bin = (A > 0).astype(int)
+
+    metrics: dict = {}
+
+    metrics["degree"]   = bct.degrees_und(A_bin).astype(float)
+    metrics["strength"] = bct.strengths_und(A)
+
+    try:
+        metrics["clustering"] = bct.clustering_coef_wu(A)
+    except Exception:
+        metrics["clustering"] = nan_vec()
+
+    try:
+        metrics["local_efficiency"] = bct.efficiency_wei(A, local=True)
+    except Exception:
+        metrics["local_efficiency"] = nan_vec()
+
+    try:
+        metrics["betweenness"] = bct.betweenness_wei(A)
+    except Exception:
+        metrics["betweenness"] = nan_vec()
+
+    try:
+        Ci, Q = bct.community_louvain(A)
+        metrics["community"]           = Ci.astype(float)
+        metrics["modularity"]          = float(Q)
+        metrics["participation_coef"]  = bct.participation_coef(A, Ci)
+        metrics["within_module_zscore"] = bct.module_degree_zscore(A, Ci)
+        metrics["hub_type"]            = classify_hubs(
+            metrics["participation_coef"],
+            metrics["within_module_zscore"],
+        )
+    except Exception as e:
+        print(f"  ⚠ Community detection failed: {e}")
+        metrics["community"]            = nan_vec()
+        metrics["modularity"]           = np.nan
+        metrics["participation_coef"]   = nan_vec()
+        metrics["within_module_zscore"] = nan_vec()
+        metrics["hub_type"]             = np.full(n_nodes, "unknown")
+
+    return metrics
+
+
+def compute_rich_club(A: np.ndarray) -> np.ndarray | None:
+    """Compute rich-club coefficient across degree thresholds."""
     try:
         A_bin = (A > 0).astype(int)
-        rc = bct.rich_club_bu(A_bin)
-        return rc
-    except:
+        return bct.rich_club_bu(A_bin)
+    except Exception:
         return None
 
 
-# -------------------------------
-# Main Analysis Loop
-# -------------------------------
-print("Computing node-level metrics for all subjects/sessions...")
-print()
+def build_node_records(subject: str, session, atlas: str, subj_meta: pd.Series,
+                       metrics: dict, rich_club_mean: float,
+                       group_col: str | None, sex_col: str | None,
+                       n_nodes: int) -> list[dict]:
+    """Turn per-node metric arrays into a list of flat dicts (one per node)."""
+    records = []
+    for i in range(n_nodes):
+        rec = {
+            "subject": subject,
+            "session": session,
+            "atlas":   atlas,
+            "node":    i + 1,
+        }
+        if group_col: rec[group_col] = subj_meta.get(group_col, np.nan)
+        if sex_col:   rec[sex_col]   = subj_meta.get(sex_col, np.nan)
 
-all_node_data = []
-subject_summaries = []
+        for key in ["degree", "strength", "betweenness", "clustering",
+                    "local_efficiency", "participation_coef",
+                    "within_module_zscore", "community", "hub_type"]:
+            arr = metrics.get(key)
+            rec[key] = arr[i] if arr is not None and not np.isscalar(arr) else np.nan
 
-# Get unique subjects
-unique_subjects = participants_df['participant_id'].unique()
+        records.append(rec)
+    return records
 
-for idx, subject in enumerate(unique_subjects):
-    if idx % 10 == 0:
-        print(f"Progress: {idx}/{len(unique_subjects)} subjects processed...")
-    
-    # Get subject metadata
-    subj_meta = participants_df[participants_df['participant_id'] == subject].iloc[0]
-    
-    # Process each session
-    for session in [1, 2, 3]:
-        A = load_connectivity_matrix(subject, session)
-        
+
+def build_summary_record(subject: str, session, atlas: str, subj_meta: pd.Series,
+                          metrics: dict, rich_club_mean: float,
+                          group_col: str | None, sex_col: str | None) -> dict:
+    """Build a single subject-session summary dict."""
+    hub_type = metrics.get("hub_type", np.array([]))
+    summary = {
+        "subject": subject,
+        "session": session,
+        "atlas":   atlas,
+        "modularity":            metrics.get("modularity", np.nan),
+        "n_provincial_hubs":     int(np.sum(hub_type == "provincial_hub")),
+        "n_connector_hubs":      int(np.sum(hub_type == "connector_hub")),
+        "n_kinless_nodes":       int(np.sum(hub_type == "kinless_node")),
+        "n_peripheral":          int(np.sum(hub_type == "peripheral")),
+        "mean_participation":    float(np.nanmean(metrics.get("participation_coef",   [np.nan]))),
+        "mean_within_module_z":  float(np.nanmean(metrics.get("within_module_zscore", [np.nan]))),
+        "mean_betweenness":      float(np.nanmean(metrics.get("betweenness",          [np.nan]))),
+        "mean_strength":         float(np.nanmean(metrics.get("strength",             [np.nan]))),
+        "rich_club_coef":        rich_club_mean,
+    }
+    if group_col: summary[group_col] = subj_meta.get(group_col, np.nan)
+    if sex_col:   summary[sex_col]   = subj_meta.get(sex_col,   np.nan)
+    return summary
+
+
+# ============================================================================
+# PLOTS
+# ============================================================================
+
+def make_plots(summary_df: pd.DataFrame, plot_dir: Path,
+               group_col: str | None) -> None:
+    plot_dir.mkdir(exist_ok=True)
+
+    # 1. Hub counts by group
+    if group_col and group_col in summary_df.columns:
+        hub_cols = ["n_provincial_hubs", "n_connector_hubs", "n_kinless_nodes", "n_peripheral"]
+        available = [c for c in hub_cols if c in summary_df.columns]
+        if available:
+            fig, axes = plt.subplots(1, len(available), figsize=(4 * len(available), 5))
+            if len(available) == 1:
+                axes = [axes]
+            for ax, col in zip(axes, available):
+                sns.boxplot(data=summary_df, x=group_col, y=col, ax=ax)
+                ax.set_title(col.replace("_", " ").title())
+                ax.tick_params(axis="x", rotation=30)
+            plt.tight_layout()
+            plt.savefig(plot_dir / "hub_counts_by_group.png", dpi=150)
+            plt.close()
+            print("  ✓ hub_counts_by_group.png")
+
+    # 2. Mean participation coefficient by group
+    if group_col and "mean_participation" in summary_df.columns:
+        fig, ax = plt.subplots(figsize=(6, 5))
+        sns.boxplot(data=summary_df, x=group_col, y="mean_participation", ax=ax)
+        ax.set_title("Mean Participation Coefficient by Group")
+        ax.tick_params(axis="x", rotation=30)
+        plt.tight_layout()
+        plt.savefig(plot_dir / "participation_by_group.png", dpi=150)
+        plt.close()
+        print("  ✓ participation_by_group.png")
+
+    # 3. Hub type distribution (stacked bar)
+    hub_cols = ["n_provincial_hubs", "n_connector_hubs", "n_kinless_nodes", "n_peripheral"]
+    available = [c for c in hub_cols if c in summary_df.columns]
+    if available:
+        means = summary_df[available].mean()
+        fig, ax = plt.subplots(figsize=(7, 5))
+        means.plot(kind="bar", ax=ax, color=["steelblue", "tomato", "goldenrod", "gray"])
+        ax.set_title("Mean Hub Type Counts per Subject-Session")
+        ax.set_ylabel("Mean Count")
+        ax.tick_params(axis="x", rotation=30)
+        plt.tight_layout()
+        plt.savefig(plot_dir / "hub_type_distribution.png", dpi=150)
+        plt.close()
+        print("  ✓ hub_type_distribution.png")
+
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+def main() -> None:
+    args   = parse_args()
+    config = load_config(args)
+
+    data_dir:      Path = config["data_dir"]
+    metadata_file: Path = config["metadata_file"]
+    output_dir:    Path = config["output_dir"]
+    binarize:      bool = config["binarize"]
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    print("=" * 70)
+    print("NODE-LEVEL NETWORK METRICS ANALYSIS")
+    print("=" * 70)
+    print(f"Data directory:   {data_dir}")
+    print(f"Metadata file:    {metadata_file}")
+    print(f"Output directory: {output_dir}")
+    print(f"Binarize:         {binarize}")
+    print()
+
+    # ── Load metadata ──────────────────────────────────────────────────────
+    print("Loading metadata...")
+    sep      = "\t" if metadata_file.suffix == ".tsv" else ","
+    metadata = pd.read_csv(metadata_file, sep=sep)
+    print(f"  ✓ {len(metadata)} records, columns: {list(metadata.columns)}")
+
+    # ── Auto-detection ─────────────────────────────────────────────────────
+    print("\nAuto-detecting data structure...")
+    cols     = detect_metadata_columns(metadata)
+    fmt      = detect_file_format(data_dir)
+    n_nodes  = detect_n_nodes(data_dir, fmt)
+    atlas    = detect_atlas_name(data_dir)
+    sessions = detect_sessions(metadata, cols["session_col"])
+
+    subject_col = cols["subject_col"]
+    session_col = cols["session_col"]
+    group_col   = cols.get("group_col")
+    sex_col     = cols.get("sex_col")
+
+    print(f"\n  Summary: atlas={atlas}, n_nodes={n_nodes}, format={fmt}, sessions={sessions}")
+    print()
+
+    # ── Compute metrics ────────────────────────────────────────────────────
+    print("Computing node-level metrics...")
+    all_node_records = []
+    all_summaries    = []
+
+    for _, row in metadata.iterrows():
+        subject = str(row[subject_col])
+        session = str(row[session_col])
+
+        A = load_connectivity_matrix(data_dir, subject, session, fmt, n_nodes)
         if A is None:
             continue
-        
-        # Compute node metrics
-        metrics = compute_node_metrics(A)
-        
-        # Compute rich club (once per matrix, not per node)
-        rich_club = compute_rich_club(A)
-        
-        # Store node-level data
-        for node_idx in range(N_NODES):
-            node_data = {
-                'subject': subject,
-                'session': session,
-                'atlas': ATLAS,
-                'node': node_idx + 1,  # 1-indexed
-                'group': subj_meta.get('group', 'unknown'),
-                'sex': subj_meta.get('sex', 'unknown'),
-                'age': subj_meta.get('age', np.nan),
-                'degree': metrics['degree'][node_idx],
-                'strength': metrics['strength'][node_idx],
-                'betweenness': metrics['betweenness'][node_idx],
-                'clustering': metrics['clustering'][node_idx],
-                'local_efficiency': metrics['local_efficiency'][node_idx],
-                'participation_coef': metrics['participation_coef'][node_idx],
-                'within_module_zscore': metrics['within_module_zscore'][node_idx],
-                'community': metrics['community'][node_idx],
-                'hub_type': metrics['hub_type'][node_idx]
-            }
-            all_node_data.append(node_data)
-        
-        # Store subject-level summary
-        summary = {
-            'subject': subject,
-            'session': session,
-            'atlas': ATLAS,
-            'group': subj_meta.get('group', 'unknown'),
-            'sex': subj_meta.get('sex', 'unknown'),
-            'age': subj_meta.get('age', np.nan),
-            'modularity': metrics['modularity'],
-            'n_communities': len(np.unique(metrics['community'][~np.isnan(metrics['community'])])),
-            'n_provincial_hubs': np.sum(metrics['hub_type'] == 'provincial_hub'),
-            'n_connector_hubs': np.sum(metrics['hub_type'] == 'connector_hub'),
-            'n_kinless_nodes': np.sum(metrics['hub_type'] == 'kinless_node'),
-            'n_peripheral': np.sum(metrics['hub_type'] == 'peripheral'),
-            'mean_participation': np.nanmean(metrics['participation_coef']),
-            'mean_within_module_z': np.nanmean(metrics['within_module_zscore']),
-            'mean_betweenness': np.nanmean(metrics['betweenness']),
-            'mean_strength': np.nanmean(metrics['strength'])
-        }
-        
-        if rich_club is not None:
-            summary['rich_club_coef'] = np.nanmean(rich_club) if len(rich_club) > 0 else np.nan
-        else:
-            summary['rich_club_coef'] = np.nan
-            
-        subject_summaries.append(summary)
 
-print(f"\nCompleted: {len(unique_subjects)} subjects processed")
-print(f"Total node records: {len(all_node_data)}")
-print(f"Total subject-session records: {len(subject_summaries)}")
-print()
+        metrics        = compute_node_metrics(A, n_nodes, binarize=binarize)
+        rc             = compute_rich_club(A)
+        rc_mean        = float(np.nanmean(rc)) if rc is not None and len(rc) > 0 else np.nan
 
-# -------------------------------
-# Save Results
-# -------------------------------
-print("Saving node-level data...")
+        all_node_records.extend(
+            build_node_records(subject, session, atlas, row, metrics, rc_mean,
+                               group_col, sex_col, n_nodes)
+        )
+        all_summaries.append(
+            build_summary_record(subject, session, atlas, row, metrics, rc_mean,
+                                 group_col, sex_col)
+        )
 
-# Convert to DataFrames
-node_df = pd.DataFrame(all_node_data)
-summary_df = pd.DataFrame(subject_summaries)
+    print(f"\n✓ Processed {len(all_summaries)} subject-sessions, {len(all_node_records)} node records")
 
-# Save as parquet (efficient compression)
-node_output = OUTPUT_DIR / "node_level_metrics.parquet"
-summary_output = OUTPUT_DIR / "subject_hub_summaries.parquet"
+    if not all_node_records:
+        sys.exit("✗ No matrices could be loaded. Check data_dir and file naming.")
 
-node_df.to_parquet(node_output, index=False)
-summary_df.to_parquet(summary_output, index=False)
+    node_df    = pd.DataFrame(all_node_records)
+    summary_df = pd.DataFrame(all_summaries)
 
-print(f"✅ Node-level metrics saved: {node_output}")
-print(f"✅ Subject summaries saved: {summary_output}")
-print()
+    # ── Save ───────────────────────────────────────────────────────────────
+    node_df.to_parquet(output_dir / "node_level_metrics.parquet", index=False)
+    node_df.to_csv(output_dir / "node_level_metrics.csv", index=False)
+    summary_df.to_parquet(output_dir / "subject_hub_summaries.parquet", index=False)
+    summary_df.to_csv(output_dir / "subject_hub_summaries.csv", index=False)
+    print("✓ Saved: node_level_metrics.parquet/.csv + subject_hub_summaries.parquet/.csv")
 
-# -------------------------------
-# Hub Analysis Summary
-# -------------------------------
-if len(node_df) == 0:
-    print("ERROR: No data loaded! Check connectivity matrix paths.")
-    print("\nDebugging: Testing file loading for first subject...")
-    test_subject = unique_subjects[0] if len(unique_subjects) > 0 else "sub-1291003"
-    test_path = list(DATA_DIR.glob(f"{test_subject}_ses-1*/tracks_1000k_streamline/by_atlas/{ATLAS}/*.connectivity.mat"))
-    print(f"  Test pattern: {test_subject}_ses-1*/tracks_1000k_streamline/by_atlas/{ATLAS}/*.connectivity.mat")
-    print(f"  Matches found: {len(test_path)}")
-    if test_path:
-        print(f"  Example file: {test_path[0]}")
-    exit(1)
+    # ── Plots ──────────────────────────────────────────────────────────────
+    print("\nCreating plots...")
+    make_plots(summary_df, output_dir / "plots", group_col)
 
-print("="*70)
-print("HUB ANALYSIS SUMMARY")
-print("="*70)
+    # ── Done ───────────────────────────────────────────────────────────────
+    print("\n" + "=" * 70)
+    print("ANALYSIS COMPLETE")
+    print("=" * 70)
+    print(f"Output: {output_dir}")
 
-# Count hub types across all sessions
-hub_counts = node_df['hub_type'].value_counts()
-print("\nHub Type Distribution (all nodes, all sessions):")
-for hub_type, count in hub_counts.items():
-    pct = 100 * count / len(node_df)
-    print(f"  {hub_type}: {count} ({pct:.1f}%)")
 
-# Average hubs per subject
-print("\nAverage Hub Counts per Subject-Session:")
-print(f"  Provincial hubs: {summary_df['n_provincial_hubs'].mean():.1f} ± {summary_df['n_provincial_hubs'].std():.1f}")
-print(f"  Connector hubs: {summary_df['n_connector_hubs'].mean():.1f} ± {summary_df['n_connector_hubs'].std():.1f}")
-print(f"  Kinless nodes: {summary_df['n_kinless_nodes'].mean():.1f} ± {summary_df['n_kinless_nodes'].std():.1f}")
-print(f"  Peripheral nodes: {summary_df['n_peripheral'].mean():.1f} ± {summary_df['n_peripheral'].std():.1f}")
-
-# Group differences in hub counts
-print("\nHub Counts by Intervention Group:")
-for group in summary_df['group'].unique():
-    if group == 'unknown':
-        continue
-    group_data = summary_df[summary_df['group'] == group]
-    print(f"\n  {group} (n={len(group_data)}):")
-    print(f"    Provincial: {group_data['n_provincial_hubs'].mean():.1f} ± {group_data['n_provincial_hubs'].std():.1f}")
-    print(f"    Connector: {group_data['n_connector_hubs'].mean():.1f} ± {group_data['n_connector_hubs'].std():.1f}")
-
-print()
-print("="*70)
-print("NEXT STEPS:")
-print("="*70)
-print("1. Run temporal trajectory analysis on node-level metrics")
-print("2. Identify which specific nodes/hubs show intervention effects")
-print("3. Create spatial maps of connectivity change")
-print("4. Test hub-specific intervention effects (provincial vs connector)")
-print("5. Examine rich-club reorganization across timepoints")
-print()
-print("Output files ready for visualization and statistical testing!")
-print("="*70)
+if __name__ == "__main__":
+    main()

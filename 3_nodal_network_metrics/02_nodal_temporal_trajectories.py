@@ -1,479 +1,434 @@
+#!/usr/bin/env python3
 """
-Node-Level Temporal Trajectory Analysis
-========================================
+SCRIPT: Node-Level Temporal Trajectory Analysis
+================================================
 
-Analyzes how individual Brainnectome regions (nodes) respond to intervention:
-1. Temporal trajectories per node per metric
-2. Regional intervention effects maps
-3. Hub-specific response analysis (provincial vs connector hubs)
-4. Rich-club reorganization
-5. Publication-ready brain visualizations
+PURPOSE:
+    Analyzes how individual brain regions respond to intervention over time.
+    Reads node-level metrics from 02_nodal_metrics.py output.
+    Intervention and control groups are auto-detected from the data.
 
-Output: Regional effect maps, hub-specific statistics, node trajectories
+USAGE:
+    python 03_node_trajectory.py run_spec.json
+    python 03_node_trajectory.py --node-metrics-dir /path/to/node_level_analysis --output-dir /path/to/out
 
-Author: Analysis Pipeline
-Date: January 2026
+AUTHOR: Analysis Pipeline
+VERSION: 1.0 (Auto-detection, run_spec driven)
 """
 
-import os
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import warnings
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from scipy import stats
-from scipy.spatial.distance import pdist, squareform
-import warnings
-warnings.filterwarnings('ignore')
+
+warnings.filterwarnings("ignore")
 
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
-from matplotlib.patches import Rectangle
 
-# ======================== CONFIGURATION ========================
-BCT_DIR = Path("/data/local/129_PK01/derivatives/bct")
-NODE_ANALYSIS_DIR = BCT_DIR / "node_level_analysis"
-OUTPUT_DIR = BCT_DIR / "node_trajectory_analysis"
-OUTPUT_DIR.mkdir(exist_ok=True)
 
-ATLAS = "Brainnectome"
-N_NODES = 246
+# ============================================================================
+# CLI / run_spec LOADING
+# ============================================================================
 
-print("="*70)
-print("NODE-LEVEL TEMPORAL TRAJECTORY ANALYSIS")
-print("="*70)
-print(f"Input: {NODE_ANALYSIS_DIR}")
-print(f"Output: {OUTPUT_DIR}")
-print()
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Node trajectory analysis. Pass run_spec.json or explicit paths."
+    )
+    parser.add_argument("run_spec", nargs="?", help="Path to run_spec.json")
+    parser.add_argument("--node-metrics-dir", help="Directory with node_level_metrics.parquet")
+    parser.add_argument("--output-dir",       help="Output directory")
+    parser.add_argument("--control-group",    help="Control group label (auto-detected if omitted)")
+    return parser.parse_args()
 
-# ======================== LOAD NODE-LEVEL DATA ========================
-print("Loading node-level metrics...")
 
-node_metrics_file = NODE_ANALYSIS_DIR / "node_level_metrics.parquet"
-if not node_metrics_file.exists():
-    raise FileNotFoundError(f"Node metrics file not found: {node_metrics_file}")
+def load_config(args: argparse.Namespace) -> dict:
+    config: dict = {}
 
-node_df = pd.read_parquet(node_metrics_file)
-print(f"Loaded {len(node_df)} node-level records")
-print(f"Nodes: {node_df['node'].max()} regions")
-print(f"Sessions: {node_df['session'].unique()}")
-print(f"Groups: {node_df['group'].unique()}")
-print()
+    if args.run_spec:
+        spec_path = Path(args.run_spec).expanduser().resolve()
+        if not spec_path.exists():
+            sys.exit(f"x run_spec not found: {spec_path}")
+        with open(spec_path, "r", encoding="utf-8") as f:
+            spec = json.load(f)
+        inputs  = spec.get("inputs", {})
+        outputs = spec.get("outputs", {})
+        config["node_metrics_dir"] = inputs.get("node_metrics_dir")
+        config["output_dir"]       = outputs.get("output_dir")
+        config["control_group"]    = spec.get("control_group", None)
 
-# Load subject summaries for hub classification
-summary_file = NODE_ANALYSIS_DIR / "subject_hub_summaries.parquet"
-summary_df = pd.read_parquet(summary_file)
-print(f"Loaded {len(summary_df)} subject-session hub summaries")
-print()
+    if args.node_metrics_dir: config["node_metrics_dir"] = args.node_metrics_dir
+    if args.output_dir:       config["output_dir"]       = args.output_dir
+    if args.control_group:    config["control_group"]    = args.control_group
 
-# ======================== CALCULATE NODAL TRAJECTORIES ========================
-print("Calculating node-level temporal trajectories...")
+    missing = [k for k in ("node_metrics_dir", "output_dir") if not config.get(k)]
+    if missing:
+        sys.exit(
+            f"x Missing required config: {', '.join(missing)}\n"
+            "  Provide via run_spec.json or CLI flags (--node-metrics-dir, --output-dir)"
+        )
 
-nodal_trajectories = []
+    config["node_metrics_dir"] = Path(config["node_metrics_dir"]).expanduser().resolve()
+    config["output_dir"]       = Path(config["output_dir"]).expanduser().resolve()
+    return config
 
-for node in range(1, N_NODES + 1):
-    node_data = node_df[node_df['node'] == node].copy()
-    
-    if len(node_data) == 0:
-        continue
-    
-    # Get unique metrics per node
-    metrics_list = ['degree', 'strength', 'betweenness', 'clustering',
-                   'participation_coef', 'within_module_zscore']
-    
-    for metric in metrics_list:
-        if metric not in node_data.columns:
+
+# ============================================================================
+# AUTO-DETECTION
+# ============================================================================
+
+def detect_group_col(node_df: pd.DataFrame) -> str:
+    candidates = ["group", "condition", "arm", "intervention"]
+    cols_lower  = {c.lower(): c for c in node_df.columns}
+    for c in candidates:
+        if c in cols_lower:
+            print(f"  + Group column detected: {cols_lower[c]}")
+            return cols_lower[c]
+    sys.exit(f"x Could not detect group column. Available: {list(node_df.columns)}")
+
+
+def detect_session_col(node_df: pd.DataFrame) -> str:
+    candidates = ["session", "ses", "timepoint", "visit"]
+    cols_lower  = {c.lower(): c for c in node_df.columns}
+    for c in candidates:
+        if c in cols_lower:
+            print(f"  + Session column detected: {cols_lower[c]}")
+            return cols_lower[c]
+    sys.exit(f"x Could not detect session column. Available: {list(node_df.columns)}")
+
+
+def detect_metric_cols(node_df: pd.DataFrame) -> list:
+    exclude = {"subject", "session", "ses", "node", "group", "condition",
+               "arm", "intervention", "sex", "gender", "age", "atlas",
+               "hub_type", "community"}
+    metrics = [c for c in node_df.columns
+               if c.lower() not in exclude
+               and pd.api.types.is_numeric_dtype(node_df[c])]
+    print(f"  + Metric columns detected: {metrics}")
+    return metrics
+
+
+def detect_n_nodes(node_df: pd.DataFrame) -> int:
+    n = int(node_df["node"].max())
+    print(f"  + Number of nodes detected: {n}")
+    return n
+
+
+def detect_groups(node_df: pd.DataFrame, group_col: str):
+    group_counts    = node_df.groupby(group_col)["subject"].nunique()
+    control_group   = group_counts.idxmin()
+    interv_groups   = [g for g in group_counts.index if g != control_group]
+    print(f"  + Control group detected:       {control_group} (n={group_counts[control_group]})")
+    print(f"  + Intervention groups detected: {interv_groups}")
+    return interv_groups, control_group
+
+
+# ============================================================================
+# TRAJECTORY COMPUTATION
+# ============================================================================
+
+def compute_nodal_trajectories(node_df, metric_cols, group_col, session_col, n_nodes):
+    records = []
+    for node in range(1, n_nodes + 1):
+        node_data = node_df[node_df["node"] == node]
+        if node_data.empty:
             continue
-        
-        # Calculate slopes per group
-        for group in node_data['group'].unique():
-            group_data = node_data[node_data['group'] == group].copy()
-            
-            if len(group_data) < 2:
+        for metric in metric_cols:
+            if metric not in node_data.columns:
                 continue
-            
-            # Fit linear trajectory
-            sessions = group_data['session'].values
-            values = group_data[metric].values
-            
-            # Remove NaN
-            valid_idx = ~np.isnan(values)
-            if np.sum(valid_idx) < 2:
+            for group, group_data in node_data.groupby(group_col):
+                sessions = group_data[session_col].values
+                values   = group_data[metric].values
+                valid    = ~np.isnan(values)
+                if valid.sum() < 2:
+                    continue
+                s_v = sessions[valid].astype(float)
+                y_v = values[valid]
+                try:
+                    coeffs      = np.polyfit(s_v, y_v, 1)
+                    slope, intercept = coeffs
+                    y_pred      = np.polyval(coeffs, s_v)
+                    ss_res      = np.sum((y_v - y_pred) ** 2)
+                    ss_tot      = np.sum((y_v - y_v.mean()) ** 2)
+                    r2          = 1 - ss_res / ss_tot if ss_tot > 0 else np.nan
+                    records.append({
+                        "node":             node,
+                        "metric":           metric,
+                        "group":            group,
+                        "slope":            slope,
+                        "intercept":        intercept,
+                        "r_squared":        r2,
+                        "change_magnitude": float(y_v.max() - y_v.min()),
+                        "change_direction": "increasing" if slope > 0 else "decreasing",
+                        "n_sessions":       int(valid.sum()),
+                        "mean_value":       float(y_v.mean()),
+                    })
+                except Exception:
+                    continue
+    return pd.DataFrame(records)
+
+
+# ============================================================================
+# EFFECT SIZE COMPUTATION
+# ============================================================================
+
+def compute_intervention_effects(trajectory_df, intervention_groups, control_group, n_nodes):
+    records = []
+    for metric in trajectory_df["metric"].unique():
+        for node in range(1, n_nodes + 1):
+            base    = trajectory_df[(trajectory_df["node"] == node) &
+                                     (trajectory_df["metric"] == metric)]
+            interv  = base[base["group"].isin(intervention_groups)]["slope"].dropna().values
+            control = base[base["group"] == control_group]["slope"].dropna().values
+            if len(interv) == 0 or len(control) == 0:
                 continue
-            
-            sessions_valid = sessions[valid_idx]
-            values_valid = values[valid_idx]
-            
-            # Linear fit
-            try:
-                coeffs = np.polyfit(sessions_valid, values_valid, 1)
-                slope = coeffs[0]
-                intercept = coeffs[1]
-                
-                # R-squared
-                y_pred = np.polyval(coeffs, sessions_valid)
-                ss_res = np.sum((values_valid - y_pred)**2)
-                ss_tot = np.sum((values_valid - np.mean(values_valid))**2)
-                r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else np.nan
-                
-                # Change magnitude
-                min_val = np.min(values_valid)
-                max_val = np.max(values_valid)
-                change_magnitude = max_val - min_val
-                
-                # Direction (positive = increase, negative = decrease)
-                change_direction = 'increasing' if slope > 0 else 'decreasing'
-                
-                nodal_trajectories.append({
-                    'node': node,
-                    'metric': metric,
-                    'group': group,
-                    'slope': slope,
-                    'intercept': intercept,
-                    'r_squared': r_squared,
-                    'change_magnitude': change_magnitude,
-                    'change_direction': change_direction,
-                    'n_sessions': np.sum(valid_idx),
-                    'mean_value': np.mean(values_valid)
-                })
-            except:
-                continue
+            mean_diff  = interv.mean() - control.mean()
+            pooled_std = np.sqrt((interv.std() ** 2 + control.std() ** 2) / 2)
+            cohens_d   = mean_diff / pooled_std if pooled_std > 0 else 0.0
+            t_stat, p_val = (stats.ttest_ind(interv, control)
+                             if len(interv) > 1 and len(control) > 1
+                             else (np.nan, np.nan))
+            records.append({
+                "node":                    node,
+                "metric":                  metric,
+                "intervention_mean_slope": float(interv.mean()),
+                "control_mean_slope":      float(control.mean()),
+                "effect_size_cohens_d":    cohens_d,
+                "abs_effect_size":         abs(cohens_d),
+                "t_statistic":             t_stat,
+                "p_value":                 p_val,
+            })
+    return pd.DataFrame(records)
 
-trajectory_df = pd.DataFrame(nodal_trajectories)
-print(f"Calculated {len(trajectory_df)} node-metric-group trajectories")
-print()
 
-# Save trajectories
-trajectory_output = OUTPUT_DIR / "node_trajectories.parquet"
-trajectory_df.to_parquet(trajectory_output, index=False)
-print(f"✅ Saved: {trajectory_output}")
-print()
+# ============================================================================
+# HUB ANALYSIS
+# ============================================================================
 
-# ======================== IDENTIFY KEY RESPONDING NODES ========================
-print("Identifying nodes with strongest intervention effects...")
-
-# Compare intervention vs control for each metric
-intervention_groups = [1, 2, 3, 4]  # alone_2w, alone_4w, group_2w, group_4w
-control_group = 5
-
-effect_sizes = []
-
-for metric in trajectory_df['metric'].unique():
-    for node in range(1, N_NODES + 1):
-        # Get intervention slopes
-        interv_data = trajectory_df[
-            (trajectory_df['node'] == node) &
-            (trajectory_df['metric'] == metric) &
-            (trajectory_df['group'].isin(intervention_groups))
-        ]
-        
-        control_data = trajectory_df[
-            (trajectory_df['node'] == node) &
-            (trajectory_df['metric'] == metric) &
-            (trajectory_df['group'] == control_group)
-        ]
-        
-        if len(interv_data) == 0 or len(control_data) == 0:
+def compute_hub_responses(node_df, trajectory_df, intervention_groups,
+                           control_group, group_col, n_nodes):
+    records = []
+    for node in range(1, n_nodes + 1):
+        hub_counts = node_df[node_df["node"] == node]["hub_type"].value_counts()
+        if hub_counts.empty:
             continue
-        
-        interv_slopes = interv_data['slope'].values
-        control_slopes = control_data['slope'].values
-        
-        # Remove NaN
-        interv_slopes = interv_slopes[~np.isnan(interv_slopes)]
-        control_slopes = control_slopes[~np.isnan(control_slopes)]
-        
-        if len(interv_slopes) == 0 or len(control_slopes) == 0:
-            continue
-        
-        # Effect size (Cohen's d)
-        mean_diff = np.mean(interv_slopes) - np.mean(control_slopes)
-        pooled_std = np.sqrt((np.std(interv_slopes)**2 + np.std(control_slopes)**2) / 2)
-        
-        if pooled_std > 0:
-            cohens_d = mean_diff / pooled_std
-        else:
-            cohens_d = 0
-        
-        # T-test
-        if len(interv_slopes) > 1 and len(control_slopes) > 1:
-            t_stat, p_val = stats.ttest_ind(interv_slopes, control_slopes)
-        else:
-            t_stat, p_val = np.nan, np.nan
-        
-        effect_sizes.append({
-            'node': node,
-            'metric': metric,
-            'intervention_mean_slope': np.mean(interv_slopes),
-            'control_mean_slope': np.mean(control_slopes),
-            'effect_size_cohens_d': cohens_d,
-            't_statistic': t_stat,
-            'p_value': p_val,
-            'abs_effect_size': np.abs(cohens_d)
-        })
+        modal_hub  = hub_counts.idxmax()
+        node_trajs = trajectory_df[trajectory_df["node"] == node]
+        for metric in node_trajs["metric"].unique():
+            m       = node_trajs[node_trajs["metric"] == metric]
+            interv  = m[m["group"].isin(intervention_groups)]["slope"].mean()
+            control = m[m["group"] == control_group]["slope"].mean()
+            if np.isnan(interv) or np.isnan(control):
+                continue
+            records.append({
+                "node":                    node,
+                "metric":                  metric,
+                "hub_type":                modal_hub,
+                "intervention_mean_slope": interv,
+                "control_mean_slope":      control,
+                "slope_difference":        interv - control,
+            })
+    return pd.DataFrame(records)
 
-effects_df = pd.DataFrame(effect_sizes)
-print(f"Calculated {len(effects_df)} intervention vs control effects")
-print()
 
-# Top responding nodes
-print("Top 10 Nodes with Strongest Intervention Effects:")
-top_effects = effects_df.nlargest(10, 'abs_effect_size')[
-    ['node', 'metric', 'effect_size_cohens_d', 'p_value']
-]
-print(top_effects.to_string(index=False))
-print()
-
-# Save effects
-effects_output = OUTPUT_DIR / "intervention_effect_sizes.parquet"
-effects_df.to_parquet(effects_output, index=False)
-print(f"✅ Saved: {effects_output}")
-print()
-
-# ======================== HUB-SPECIFIC ANALYSIS ========================
-print("Analyzing hub-specific intervention responses...")
-
-# Get hub classifications from subject summaries
-hub_classifications = []
-
-for node in range(1, N_NODES + 1):
-    node_trajectories = trajectory_df[trajectory_df['node'] == node]
-    
-    if len(node_trajectories) == 0:
-        continue
-    
-    # Get hub types from node-level data (modal hub type across subjects)
-    node_hub_data = node_df[node_df['node'] == node]['hub_type'].value_counts()
-    
-    if len(node_hub_data) == 0:
-        continue
-    
-    modal_hub_type = node_hub_data.idxmax()
-    
-    # Calculate mean slope across intervention groups
-    interv_trajectories = node_trajectories[
-        node_trajectories['group'].isin(intervention_groups)
-    ]
-    
-    control_trajectories = node_trajectories[
-        node_trajectories['group'] == control_group
-    ]
-    
-    if len(interv_trajectories) > 0 and len(control_trajectories) > 0:
-        for metric in node_trajectories['metric'].unique():
-            interv_metric = interv_trajectories[interv_trajectories['metric'] == metric]
-            control_metric = control_trajectories[control_trajectories['metric'] == metric]
-            
-            if len(interv_metric) > 0 and len(control_metric) > 0:
-                hub_classifications.append({
-                    'node': node,
-                    'metric': metric,
-                    'hub_type': modal_hub_type,
-                    'intervention_mean_slope': interv_metric['slope'].mean(),
-                    'control_mean_slope': control_metric['slope'].mean(),
-                    'slope_difference': (interv_metric['slope'].mean() - 
-                                        control_metric['slope'].mean())
-                })
-
-hub_df = pd.DataFrame(hub_classifications)
-
-# Compare hub types
-print("\nMean Intervention Response by Hub Type:")
-hub_comparison = hub_df.groupby('hub_type')[
-    ['intervention_mean_slope', 'control_mean_slope', 'slope_difference']
-].mean()
-print(hub_comparison)
-print()
-
-# Statistical test: do hub types respond differently?
-hub_types = hub_df['hub_type'].unique()
-for metric in hub_df['metric'].unique():
-    metric_data = hub_df[hub_df['metric'] == metric]
-    
-    if len(hub_types) >= 2:
-        groups_by_hub = [metric_data[metric_data['hub_type'] == ht]['slope_difference'].values
-                        for ht in hub_types]
-        groups_by_hub = [g for g in groups_by_hub if len(g) > 0]
-        
-        if len(groups_by_hub) >= 2:
-            f_stat, p_val = stats.f_oneway(*groups_by_hub)
+def test_hub_type_effects(hub_df):
+    hub_types = hub_df["hub_type"].unique()
+    for metric in hub_df["metric"].unique():
+        m_data = hub_df[hub_df["metric"] == metric]
+        groups = [m_data[m_data["hub_type"] == ht]["slope_difference"].values
+                  for ht in hub_types]
+        groups = [g for g in groups if len(g) > 0]
+        if len(groups) >= 2:
+            f_stat, p_val = stats.f_oneway(*groups)
             if p_val < 0.05:
-                print(f"✅ Hub type effect on {metric}: F={f_stat:.3f}, p={p_val:.4f}")
+                print(f"  + Hub type effect on {metric}: F={f_stat:.3f}, p={p_val:.4f}")
 
-# Save hub analysis
-hub_output = OUTPUT_DIR / "hub_specific_responses.parquet"
-hub_df.to_parquet(hub_output, index=False)
-print(f"\n✅ Saved: {hub_output}")
-print()
 
-# ======================== REGIONAL EFFECT MAPS ========================
-print("Creating regional effect maps...")
+# ============================================================================
+# PLOTS
+# ============================================================================
 
-# Create effect size matrix (nodes × metrics)
-effect_matrix = effects_df.pivot_table(
-    index='node',
-    columns='metric',
-    values='effect_size_cohens_d',
-    fill_value=0
-)
+def make_plots(effects_df, hub_df, trajectory_df, plot_dir):
+    plot_dir.mkdir(exist_ok=True)
 
-# Heatmap: Intervention effect sizes per node per metric
-fig, ax = plt.subplots(figsize=(12, 20))
+    # 1. Regional effect heatmap
+    if not effects_df.empty:
+        effect_matrix = effects_df.pivot_table(
+            index="node", columns="metric",
+            values="effect_size_cohens_d", fill_value=0
+        )
+        fig, ax = plt.subplots(figsize=(12, max(8, len(effect_matrix) // 10)))
+        sns.heatmap(effect_matrix, cmap="RdBu_r", center=0,
+                    cbar_kws={"label": "Cohen's d"}, ax=ax)
+        ax.set_title("Intervention Effect Sizes - Node x Metric", fontweight="bold")
+        plt.tight_layout()
+        plt.savefig(plot_dir / "regional_effect_heatmap.png", dpi=150)
+        plt.close()
+        print("  + regional_effect_heatmap.png")
 
-sns.heatmap(effect_matrix, cmap='RdBu_r', center=0, 
-            cbar_kws={'label': "Cohen's d (Intervention Effect)"}, ax=ax)
+    # 2. Per-metric node effect bars
+    for metric in effects_df["metric"].unique():
+        m_data = effects_df[effects_df["metric"] == metric].sort_values("effect_size_cohens_d")
+        colors = ["tomato" if x > 0 else "steelblue"
+                  for x in m_data["effect_size_cohens_d"].values]
+        fig, ax = plt.subplots(figsize=(10, max(6, len(m_data) // 8)))
+        ax.barh(range(len(m_data)), m_data["effect_size_cohens_d"].values,
+                color=colors, alpha=0.7)
+        ax.set_yticks(range(len(m_data)))
+        ax.set_yticklabels(m_data["node"].values, fontsize=6)
+        ax.axvline(0, color="black", linewidth=0.5)
+        ax.set_xlabel("Cohen's d")
+        ax.set_title(f"Intervention Effect: {metric}", fontweight="bold")
+        plt.tight_layout()
+        plt.savefig(plot_dir / f"node_effects_{metric}.png", dpi=150)
+        plt.close()
+        print(f"  + node_effects_{metric}.png")
 
-ax.set_xlabel('Metric', fontsize=12, fontweight='bold')
-ax.set_ylabel('Brainnectome Node', fontsize=12, fontweight='bold')
-ax.set_title('Intervention Effect Sizes - Node × Metric\n(Red=Increased, Blue=Decreased with Intervention)',
-             fontsize=14, fontweight='bold')
+    # 3. Hub type response distributions
+    if not hub_df.empty:
+        metrics_to_plot = hub_df["metric"].unique()[:4]
+        n = len(metrics_to_plot)
+        fig, axes = plt.subplots(1, n, figsize=(4 * n, 5))
+        if n == 1:
+            axes = [axes]
+        for ax, metric in zip(axes, metrics_to_plot):
+            m_hub      = hub_df[hub_df["metric"] == metric]
+            hub_types  = m_hub["hub_type"].unique()
+            data_groups = [m_hub[m_hub["hub_type"] == ht]["slope_difference"].values
+                           for ht in hub_types]
+            bp = ax.boxplot(data_groups, labels=hub_types, patch_artist=True)
+            for patch in bp["boxes"]:
+                patch.set_facecolor("lightblue")
+            ax.axhline(0, color="red", linestyle="--", alpha=0.5)
+            ax.set_title(f"Hub Response: {metric}", fontweight="bold")
+            ax.tick_params(axis="x", rotation=30)
+        plt.tight_layout()
+        plt.savefig(plot_dir / "hub_type_response_distributions.png", dpi=150)
+        plt.close()
+        print("  + hub_type_response_distributions.png")
 
-plt.tight_layout()
-plt.savefig(OUTPUT_DIR / 'regional_effect_heatmap.png', dpi=300, bbox_inches='tight')
-plt.close()
-print("✅ Saved: regional_effect_heatmap.png")
+    # 4. Trajectory examples (top 6 nodes)
+    if not effects_df.empty and not trajectory_df.empty:
+        top_nodes = effects_df.nlargest(6, "abs_effect_size")["node"].unique()
+        metric_ex = trajectory_df["metric"].iloc[0]
+        fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+        axes = axes.flatten()
+        for i, node in enumerate(top_nodes):
+            ax = axes[i]
+            node_trajs = trajectory_df[(trajectory_df["node"] == node) &
+                                        (trajectory_df["metric"] == metric_ex)]
+            for _, traj in node_trajs.iterrows():
+                x = np.linspace(1, traj["n_sessions"], 20)
+                y = traj["intercept"] + traj["slope"] * x
+                ax.plot(x, y, label=str(traj["group"]), linewidth=2)
+            ax.set_title(f"Node {node} - {metric_ex}", fontweight="bold")
+            ax.set_xlabel("Session")
+            ax.set_ylabel(metric_ex)
+            ax.legend(fontsize=7)
+            ax.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(plot_dir / "trajectory_examples_top_nodes.png", dpi=150)
+        plt.close()
+        print("  + trajectory_examples_top_nodes.png")
 
-# Create effect map per metric (node rankings)
-for metric in trajectory_df['metric'].unique():
-    metric_effects = effects_df[effects_df['metric'] == metric].copy()
-    metric_effects = metric_effects.sort_values('effect_size_cohens_d', ascending=False)
-    
-    fig, ax = plt.subplots(figsize=(12, 14))
-    
-    colors = ['red' if x > 0 else 'blue' for x in metric_effects['effect_size_cohens_d'].values]
-    
-    ax.barh(range(len(metric_effects)), metric_effects['effect_size_cohens_d'].values, color=colors, alpha=0.7)
-    ax.set_yticks(range(len(metric_effects)))
-    ax.set_yticklabels(metric_effects['node'].values, fontsize=8)
-    ax.set_xlabel("Cohen's d (Intervention Effect Size)", fontsize=11, fontweight='bold')
-    ax.set_ylabel('Brainnectome Node', fontsize=11, fontweight='bold')
-    ax.set_title(f'Intervention Effect Sizes: {metric.upper()}\n(Top Responding Nodes)',
-                 fontsize=13, fontweight='bold')
-    ax.axvline(x=0, color='black', linestyle='-', linewidth=0.5)
-    ax.grid(alpha=0.3, axis='x')
-    
-    plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / f'node_effects_{metric}.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f"✅ Saved: node_effects_{metric}.png")
 
-print()
+# ============================================================================
+# MAIN
+# ============================================================================
 
-# ======================== HUB TYPE VISUALIZATION ========================
-print("Creating hub-specific response visualizations...")
+def main() -> None:
+    args   = parse_args()
+    config = load_config(args)
 
-# Distribution of slopes by hub type
-fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    node_metrics_dir = config["node_metrics_dir"]
+    output_dir       = config["output_dir"]
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-metrics_to_plot = hub_df['metric'].unique()[:4]  # First 4 metrics
+    print("=" * 70)
+    print("NODE-LEVEL TEMPORAL TRAJECTORY ANALYSIS")
+    print("=" * 70)
+    print(f"Input:  {node_metrics_dir}")
+    print(f"Output: {output_dir}")
+    print()
 
-for idx, metric in enumerate(metrics_to_plot):
-    ax = axes[idx // 2, idx % 2]
-    
-    metric_hub = hub_df[hub_df['metric'] == metric]
-    
-    hub_types_list = metric_hub['hub_type'].unique()
-    data_by_hub = [metric_hub[metric_hub['hub_type'] == ht]['slope_difference'].values
-                  for ht in hub_types_list]
-    
-    bp = ax.boxplot(data_by_hub, labels=hub_types_list, patch_artist=True)
-    
-    for patch in bp['boxes']:
-        patch.set_facecolor('lightblue')
-    
-    ax.axhline(y=0, color='red', linestyle='--', alpha=0.5)
-    ax.set_ylabel('Intervention Effect (Slope Difference)', fontsize=10)
-    ax.set_title(f'Hub Type Response: {metric}', fontsize=11, fontweight='bold')
-    ax.grid(alpha=0.3, axis='y')
+    # Load data
+    print("Loading node-level metrics...")
+    node_file = node_metrics_dir / "node_level_metrics.parquet"
+    if not node_file.exists():
+        sys.exit(f"x node_level_metrics.parquet not found in: {node_metrics_dir}")
+    node_df = pd.read_parquet(node_file)
+    print(f"  + {len(node_df)} node records loaded")
 
-plt.tight_layout()
-plt.savefig(OUTPUT_DIR / 'hub_type_response_distributions.png', dpi=300, bbox_inches='tight')
-plt.close()
-print("✅ Saved: hub_type_response_distributions.png")
+    # Auto-detection
+    print("\nAuto-detecting data structure...")
+    group_col   = detect_group_col(node_df)
+    session_col = detect_session_col(node_df)
+    metric_cols = detect_metric_cols(node_df)
+    n_nodes     = detect_n_nodes(node_df)
 
-# ======================== TRAJECTORY EXAMPLES ========================
-print("Creating trajectory example plots...")
+    if config.get("control_group"):
+        control_group       = config["control_group"]
+        intervention_groups = [g for g in node_df[group_col].unique()
+                                if g != control_group]
+        print(f"  + Control group (from config): {control_group}")
+        print(f"  + Intervention groups: {intervention_groups}")
+    else:
+        intervention_groups, control_group = detect_groups(node_df, group_col)
+    print()
 
-# Select top responding nodes for visualization
-top_nodes = effects_df.nlargest(6, 'abs_effect_size')['node'].unique()
+    # Trajectories
+    print("Computing nodal trajectories...")
+    trajectory_df = compute_nodal_trajectories(
+        node_df, metric_cols, group_col, session_col, n_nodes
+    )
+    print(f"  + {len(trajectory_df)} trajectories computed")
+    trajectory_df.to_parquet(output_dir / "node_trajectories.parquet", index=False)
+    print("  + Saved: node_trajectories.parquet")
 
-fig, axes = plt.subplots(2, 3, figsize=(16, 10))
-axes = axes.flatten()
+    # Intervention effects
+    print("\nComputing intervention effects...")
+    effects_df = compute_intervention_effects(
+        trajectory_df, intervention_groups, control_group, n_nodes
+    )
+    print(f"  + {len(effects_df)} node x metric effects computed")
+    effects_df.to_parquet(output_dir / "intervention_effect_sizes.parquet", index=False)
+    print("  + Saved: intervention_effect_sizes.parquet")
 
-for plot_idx, node in enumerate(top_nodes):
-    ax = axes[plot_idx]
-    
-    node_trajs = trajectory_df[
-        (trajectory_df['node'] == node) &
-        (trajectory_df['metric'] == 'degree')  # Show degree as example
-    ]
-    
-    if len(node_trajs) == 0:
-        continue
-    
-    # Plot trajectories per group
-    colors_map = {
-        'alone_2w': '#FF6B6B', 'alone_4w': '#FFA07A',
-        'group_2w': '#4169E1', 'group_4w': '#87CEEB',
-        'control': '#808080',
-        1: '#FF6B6B', 2: '#FFA07A',
-        3: '#4169E1', 4: '#87CEEB',
-        5: '#808080'
-    }
-    
-    for _, traj in node_trajs.iterrows():
-        x = np.array([1, 2, 3])
-        y = traj['intercept'] + traj['slope'] * x
-        
-        ax.plot(x, y, marker='o', label=str(traj['group']),
-               color=colors_map.get(traj['group'], 'gray'), linewidth=2, markersize=8)
-    
-    ax.set_xlabel('Session', fontsize=10)
-    ax.set_ylabel('Degree', fontsize=10)
-    ax.set_title(f'Node {node} - Degree Trajectory', fontsize=11, fontweight='bold')
-    ax.set_xticks([1, 2, 3])
-    ax.legend(fontsize=8)
-    ax.grid(alpha=0.3)
+    # Hub analysis
+    print("\nAnalyzing hub-specific responses...")
+    hub_df = compute_hub_responses(
+        node_df, trajectory_df, intervention_groups, control_group, group_col, n_nodes
+    )
+    if not hub_df.empty:
+        test_hub_type_effects(hub_df)
+        hub_df.to_parquet(output_dir / "hub_specific_responses.parquet", index=False)
+        print("  + Saved: hub_specific_responses.parquet")
 
-plt.tight_layout()
-plt.savefig(OUTPUT_DIR / 'trajectory_examples_top_nodes.png', dpi=300, bbox_inches='tight')
-plt.close()
-print("✅ Saved: trajectory_examples_top_nodes.png")
+    # Plots
+    print("\nCreating plots...")
+    make_plots(effects_df, hub_df, trajectory_df, output_dir / "plots")
 
-print()
+    # Summary
+    print("\n" + "=" * 70)
+    print("ANALYSIS COMPLETE")
+    print("=" * 70)
+    if not effects_df.empty:
+        print(f"Nodes with strong effects (|d|>0.5):   {(effects_df['abs_effect_size'] > 0.5).sum()}")
+        print(f"Nodes with moderate effects (|d|>0.2): {(effects_df['abs_effect_size'] > 0.2).sum()}")
+        print("\nTop 5 responding nodes:")
+        for _, row in effects_df.nlargest(5, "abs_effect_size").iterrows():
+            print(f"  Node {int(row['node']):3d} - {row['metric']:20s}: d = {row['effect_size_cohens_d']:.3f}")
+    print(f"\nOutput: {output_dir}")
 
-# ======================== SUMMARY STATISTICS ========================
-print("="*70)
-print("NODE-LEVEL ANALYSIS SUMMARY")
-print("="*70)
 
-print(f"\nTotal nodes analyzed: {N_NODES}")
-print(f"Nodes with significant intervention effects (|d|>0.5): {np.sum(effects_df['abs_effect_size'] > 0.5)}")
-print(f"Nodes with moderate effects (|d|>0.2): {np.sum(effects_df['abs_effect_size'] > 0.2)}")
-
-print("\nTop 5 Most Responsive Nodes (by effect size):")
-top_5 = effects_df.nlargest(5, 'abs_effect_size')[['node', 'metric', 'effect_size_cohens_d']]
-for idx, row in top_5.iterrows():
-    print(f"  Node {int(row['node']):3d} - {row['metric']:20s}: d = {row['effect_size_cohens_d']:6.3f}")
-
-print("\nMetrics with Strongest Overall Effects:")
-metric_strength = effects_df.groupby('metric')['abs_effect_size'].mean().sort_values(ascending=False)
-for metric, strength in metric_strength.items():
-    print(f"  {metric:25s}: avg |d| = {strength:.3f}")
-
-print("\nHub Type Distribution:")
-print(node_df['hub_type'].value_counts())
-
-print()
-print("="*70)
-print(f"✅ ALL OUTPUTS SAVED TO: {OUTPUT_DIR}")
-print("="*70)
-print("\nGenerated files:")
-print("  - node_trajectories.parquet")
-print("  - intervention_effect_sizes.parquet")
-print("  - hub_specific_responses.parquet")
-print("  - regional_effect_heatmap.png")
-print("  - node_effects_[metric].png (per metric)")
-print("  - hub_type_response_distributions.png")
-print("  - trajectory_examples_top_nodes.png")
-print()
+if __name__ == "__main__":
+    main()

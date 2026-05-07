@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 # Skript importieren (liegt eine Ebene höher)
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from preflight_check import load_spec, resolve_path, check_imports
+from preflight_check import load_spec, resolve_path, check_imports, main
 
 
 # ── load_spec ────────────────────────────────────────────────────────────────
@@ -88,3 +88,110 @@ def test_check_imports_empty_list():
     """Leere Liste ergibt keine fehlenden Pakete."""
     missing = check_imports([])
     assert missing == []
+
+
+# ── main() ───────────────────────────────────────────────────────────────────
+
+def _make_spec(tmp_path, extra=None):
+    """Hilfsfunktion: erstellt eine gültige run_spec.json mit echten Pfaden."""
+    script = tmp_path / "dummy_script.py"
+    script.write_text("pass")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    metadata = tmp_path / "meta.tsv"
+    metadata.write_text("participant_id\tsession\nSUB01\t1\n")
+    out_dir = tmp_path / "output"
+
+    spec = {
+        "script": str(script),
+        "inputs": {
+            "data_dir": str(data_dir),
+            "metadata_file": str(metadata),
+        },
+        "outputs": {
+            "output_dir": str(out_dir),
+        },
+    }
+    if extra:
+        spec.update(extra)
+
+    spec_file = tmp_path / "run_spec.json"
+    spec_file.write_text(json.dumps(spec))
+    return spec_file
+
+
+def test_main_success(tmp_path, capsys):
+    """main() läuft durch wenn alle Pfade existieren und Pakete vorhanden sind."""
+    spec_file = _make_spec(tmp_path)
+
+    with patch("sys.argv", ["preflight_check.py", str(spec_file)]):
+        with patch("preflight_check.check_imports", return_value=[]):
+            main()
+
+    captured = capsys.readouterr()
+    assert "✓ Script found" in captured.out
+    assert "✓ Data directory" in captured.out
+    assert "✓ All required packages are installed" in captured.out
+
+
+def test_main_missing_packages(tmp_path, capsys):
+    """main() gibt Fehlermeldung aus und beendet sich wenn Pakete fehlen."""
+    spec_file = _make_spec(tmp_path)
+
+    with patch("sys.argv", ["preflight_check.py", str(spec_file)]):
+        with patch("preflight_check.check_imports", return_value=["numpy", "pandas"]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+
+    assert exc.value.code == 2
+    captured = capsys.readouterr()
+    assert "numpy" in captured.out
+
+
+def test_main_missing_script(tmp_path):
+    """main() wirft FileNotFoundError wenn Script-Pfad nicht existiert."""
+    spec = {
+        "script": str(tmp_path / "nicht_vorhanden.py"),
+        "inputs": {
+            "data_dir": str(tmp_path),
+            "metadata_file": str(tmp_path / "meta.tsv"),
+        },
+        "outputs": {"output_dir": str(tmp_path / "out")},
+    }
+    spec_file = tmp_path / "run_spec.json"
+    spec_file.write_text(json.dumps(spec))
+
+    with patch("sys.argv", ["preflight_check.py", str(spec_file)]):
+        with pytest.raises(FileNotFoundError, match="Script not found"):
+            main()
+
+
+def test_main_missing_data_dir(tmp_path):
+    """main() wirft FileNotFoundError wenn data_dir nicht existiert."""
+    script = tmp_path / "script.py"
+    script.write_text("pass")
+    spec = {
+        "script": str(script),
+        "inputs": {
+            "data_dir": str(tmp_path / "nicht_vorhanden"),
+            "metadata_file": str(tmp_path / "meta.tsv"),
+        },
+        "outputs": {"output_dir": str(tmp_path / "out")},
+    }
+    spec_file = tmp_path / "run_spec.json"
+    spec_file.write_text(json.dumps(spec))
+
+    with patch("sys.argv", ["preflight_check.py", str(spec_file)]):
+        with pytest.raises(FileNotFoundError, match="Data directory not found"):
+            main()
+
+
+def test_main_wrong_venv(tmp_path):
+    """main() beendet sich mit Code 3 wenn falsches Python verwendet wird."""
+    spec_file = _make_spec(tmp_path, extra={"venv_python": "/anderer/python"})
+
+    with patch("sys.argv", ["preflight_check.py", str(spec_file)]):
+        with pytest.raises(SystemExit) as exc:
+            main()
+
+    assert exc.value.code == 3

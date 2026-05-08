@@ -24,4 +24,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
-pythonpath = [".", "0_installation", "1_utilities", "2_global_network_metrics"]
+pythonpath = [
+    ".",
+    "0_installation",
+    "1_utilities",
+    "2_global_network_metrics",
+    "3_nodal_network_metrics",
+    "4_statistical_classification",
+    "5_responder_analysis",
+    "6_visualization"
+]

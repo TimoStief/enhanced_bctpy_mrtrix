@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import warnings
 from pathlib import Path
@@ -60,6 +61,7 @@ def load_config(args: argparse.Namespace) -> dict:
             sys.exit(f"x run_spec not found: {spec_path}")
         with open(spec_path, "r", encoding="utf-8") as f:
             spec = json.load(f)
+        validate_run_spec_schema(spec, spec_path)
         inputs  = spec.get("inputs", {})
         outputs = spec.get("outputs", {})
         config["node_metrics_dir"] = inputs.get("node_metrics_dir")
@@ -80,6 +82,37 @@ def load_config(args: argparse.Namespace) -> dict:
     config["node_metrics_dir"] = Path(config["node_metrics_dir"]).expanduser().resolve()
     config["output_dir"]       = Path(config["output_dir"]).expanduser().resolve()
     return config
+
+
+def validate_run_spec_schema(spec: dict, spec_path: Path) -> None:
+    """Validate expected run_spec structure with explicit, actionable errors."""
+    if not isinstance(spec, dict):
+        sys.exit(f"x Invalid run_spec format in {spec_path}: top-level JSON must be an object")
+
+    inputs = spec.get("inputs")
+    outputs = spec.get("outputs")
+
+    if not isinstance(inputs, dict):
+        sys.exit(
+            f"x Invalid run_spec in {spec_path}: missing object 'inputs' with key 'node_metrics_dir'"
+        )
+    if not isinstance(outputs, dict):
+        sys.exit(
+            f"x Invalid run_spec in {spec_path}: missing object 'outputs' with key 'output_dir'"
+        )
+
+    missing_inputs = [k for k in ("node_metrics_dir",) if not inputs.get(k)]
+    missing_outputs = [k for k in ("output_dir",) if not outputs.get(k)]
+    if missing_inputs or missing_outputs:
+        msg = []
+        if missing_inputs:
+            msg.append(f"inputs: {', '.join(missing_inputs)}")
+        if missing_outputs:
+            msg.append(f"outputs: {', '.join(missing_outputs)}")
+        sys.exit(
+            f"x Invalid run_spec in {spec_path}: missing required fields ({'; '.join(msg)})\n"
+            "  Expected shape: {'inputs': {'node_metrics_dir': ...}, 'outputs': {'output_dir': ...}}"
+        )
 
 
 # ============================================================================
@@ -123,13 +156,68 @@ def detect_n_nodes(node_df: pd.DataFrame) -> int:
     return n
 
 
+def detect_subject_col(node_df: pd.DataFrame) -> str:
+    candidates = ["subject", "participant_id", "participant", "subject_id"]
+    cols_lower = {c.lower(): c for c in node_df.columns}
+    for c in candidates:
+        if c in cols_lower:
+            return cols_lower[c]
+    return ""
+
+
 def detect_groups(node_df: pd.DataFrame, group_col: str):
-    group_counts    = node_df.groupby(group_col)["subject"].nunique()
-    control_group   = group_counts.idxmin()
-    interv_groups   = [g for g in group_counts.index if g != control_group]
+    all_groups = node_df[group_col].dropna().unique().tolist()
+    if len(all_groups) < 2:
+        sys.exit(f"x Need at least 2 groups for trajectory analysis. Found: {all_groups}")
+
+    control_keywords = ["control", "ctrl", "sham", "placebo", "waitlist", "none"]
+    control_candidates = [
+        g for g in all_groups
+        if any(k in str(g).strip().lower() for k in control_keywords)
+    ]
+
+    if len(control_candidates) == 1:
+        control_group = control_candidates[0]
+    elif len(control_candidates) > 1:
+        sys.exit(
+            "x Ambiguous control group detection. Multiple control-like groups found: "
+            f"{control_candidates}. Provide --control-group or set control_group in run_spec."
+        )
+    else:
+        sys.exit(
+            "x Could not auto-detect control group from labels. "
+            f"Groups found: {all_groups}. Provide --control-group or set control_group in run_spec."
+        )
+
+    subject_col = detect_subject_col(node_df)
+    if subject_col:
+        group_counts = node_df.groupby(group_col)[subject_col].nunique()
+        n_ctrl = group_counts.get(control_group, np.nan)
+    else:
+        group_counts = node_df.groupby(group_col).size()
+        n_ctrl = group_counts.get(control_group, np.nan)
+
+    interv_groups = [g for g in all_groups if g != control_group]
+    if not interv_groups:
+        sys.exit("x No intervention groups found after control-group detection.")
+
     print(f"  + Control group detected:       {control_group} (n={group_counts[control_group]})")
     print(f"  + Intervention groups detected: {interv_groups}")
     return interv_groups, control_group
+
+
+def normalize_session_values(values: np.ndarray) -> np.ndarray:
+    """Convert session labels like 1, '1', or 'ses-1' to numeric values."""
+    norm = []
+    for v in values:
+        if pd.isna(v):
+            norm.append(np.nan)
+            continue
+        s = str(v).strip().lower()
+        # Use the first positive numeric token so labels like 'ses-1' map to 1.
+        match = re.search(r"\d+(?:\.\d+)?", s)
+        norm.append(float(match.group(0)) if match else np.nan)
+    return np.asarray(norm, dtype=float)
 
 
 # ============================================================================
@@ -151,14 +239,29 @@ def compute_nodal_trajectories(node_df, metric_cols, group_col, session_col, n_n
                 valid    = ~np.isnan(values)
                 if valid.sum() < 2:
                     continue
-                s_v = sessions[valid].astype(float)
-                y_v = values[valid]
+
+                s_v_raw = normalize_session_values(sessions[valid])
+                y_v_raw = values[valid]
+                valid_sessions = ~np.isnan(s_v_raw)
+                if valid_sessions.sum() < 2:
+                    continue
+
+                s_v = s_v_raw[valid_sessions]
+                y_v = y_v_raw[valid_sessions]
+
+                # Aggregate per session to avoid weighting sessions by unequal sample counts.
+                fit_df = pd.DataFrame({"session": s_v, "value": y_v}).groupby("session", as_index=False)["value"].mean()
+                if fit_df["session"].nunique() < 2:
+                    continue
+
+                s_fit = fit_df["session"].values
+                y_fit = fit_df["value"].values
                 try:
-                    coeffs      = np.polyfit(s_v, y_v, 1)
+                    coeffs      = np.polyfit(s_fit, y_fit, 1)
                     slope, intercept = coeffs
-                    y_pred      = np.polyval(coeffs, s_v)
-                    ss_res      = np.sum((y_v - y_pred) ** 2)
-                    ss_tot      = np.sum((y_v - y_v.mean()) ** 2)
+                    y_pred      = np.polyval(coeffs, s_fit)
+                    ss_res      = np.sum((y_fit - y_pred) ** 2)
+                    ss_tot      = np.sum((y_fit - y_fit.mean()) ** 2)
                     r2          = 1 - ss_res / ss_tot if ss_tot > 0 else np.nan
                     records.append({
                         "node":             node,
@@ -167,10 +270,10 @@ def compute_nodal_trajectories(node_df, metric_cols, group_col, session_col, n_n
                         "slope":            slope,
                         "intercept":        intercept,
                         "r_squared":        r2,
-                        "change_magnitude": float(y_v.max() - y_v.min()),
+                        "change_magnitude": float(y_fit.max() - y_fit.min()),
                         "change_direction": "increasing" if slope > 0 else "decreasing",
-                        "n_sessions":       int(valid.sum()),
-                        "mean_value":       float(y_v.mean()),
+                        "n_sessions":       int(fit_df["session"].nunique()),
+                        "mean_value":       float(y_fit.mean()),
                     })
                 except Exception:
                     continue

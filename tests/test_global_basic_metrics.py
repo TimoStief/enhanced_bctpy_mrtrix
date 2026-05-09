@@ -14,6 +14,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Schwere Imports mocken bevor das Skript geladen wird
 sys.modules.setdefault("bct", MagicMock())
 sys.modules.setdefault("umap", MagicMock())
+sys.modules.setdefault("sklearn", MagicMock())
+sys.modules.setdefault("sklearn.decomposition", MagicMock())
+sys.modules.setdefault("sklearn.preprocessing", MagicMock())
 
 import importlib
 metrics_mod = importlib.import_module("global_basic_metrics")
@@ -443,10 +446,14 @@ def test_main_runs_successfully(tmp_path):
     mock_umap = MagicMock()
     mock_umap.fit_transform.return_value = mock_embedding
 
+    def _fake_to_parquet(self, path, *args, **kwargs):
+        Path(path).write_text("parquet-stub")
+
     with patch("sys.argv", ["script", str(spec_file)]):
-        with patch("global_basic_metrics.compute_global_metrics", return_value=mock_metrics):
-            with patch("global_basic_metrics.UMAP", return_value=mock_umap):
-                main()
+        with patch("pandas.DataFrame.to_parquet", new=_fake_to_parquet):
+            with patch("global_basic_metrics.compute_global_metrics", return_value=mock_metrics):
+                with patch("global_basic_metrics.UMAP", return_value=mock_umap):
+                    main()
 
     assert (out_dir / "global_metrics.csv").exists()
     assert (out_dir / "global_metrics.parquet").exists()

@@ -14,7 +14,7 @@ Result: **One number per subject per timepoint** (e.g., global efficiency = 0.45
 
 ## Scripts in This Category
 
-### 01_global_basic_metrics.py
+### global_basic_metrics.py
 **Purpose:** Compute basic global connectivity metrics and perform dimensionality reduction
 
 **Input:**

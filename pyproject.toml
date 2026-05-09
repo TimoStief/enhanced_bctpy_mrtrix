@@ -34,3 +34,9 @@ pythonpath = [
     "5_responder_analysis",
     "6_visualization"
 ]
+testpaths = [
+    "tests"
+]
+python_files = [
+    "test_*.py"
+]

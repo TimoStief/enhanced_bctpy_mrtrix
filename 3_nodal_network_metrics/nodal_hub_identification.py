@@ -74,6 +74,7 @@ def load_config(args: argparse.Namespace) -> dict:
             sys.exit(f"✗ run_spec not found: {spec_path}")
         with open(spec_path, "r", encoding="utf-8") as f:
             spec = json.load(f)
+        validate_run_spec_schema(spec, spec_path)
 
         inputs  = spec.get("inputs", {})
         outputs = spec.get("outputs", {})
@@ -100,6 +101,37 @@ def load_config(args: argparse.Namespace) -> dict:
     config["output_dir"]    = Path(config["output_dir"]).expanduser().resolve()
     config.setdefault("binarize", False)
     return config
+
+
+def validate_run_spec_schema(spec: dict, spec_path: Path) -> None:
+    """Validate expected run_spec structure and provide actionable errors."""
+    if not isinstance(spec, dict):
+        sys.exit(f"✗ Invalid run_spec format in {spec_path}: top-level JSON must be an object")
+
+    inputs = spec.get("inputs")
+    outputs = spec.get("outputs")
+
+    if not isinstance(inputs, dict):
+        sys.exit(
+            f"✗ Invalid run_spec in {spec_path}: missing object 'inputs' with keys 'data_dir' and 'metadata_file'"
+        )
+    if not isinstance(outputs, dict):
+        sys.exit(
+            f"✗ Invalid run_spec in {spec_path}: missing object 'outputs' with key 'output_dir'"
+        )
+
+    missing_inputs = [k for k in ("data_dir", "metadata_file") if not inputs.get(k)]
+    missing_outputs = [k for k in ("output_dir",) if not outputs.get(k)]
+    if missing_inputs or missing_outputs:
+        msg = []
+        if missing_inputs:
+            msg.append(f"inputs: {', '.join(missing_inputs)}")
+        if missing_outputs:
+            msg.append(f"outputs: {', '.join(missing_outputs)}")
+        sys.exit(
+            f"✗ Invalid run_spec in {spec_path}: missing required fields ({'; '.join(msg)})\n"
+            "  Expected shape: {'inputs': {'data_dir': ..., 'metadata_file': ...}, 'outputs': {'output_dir': ...}}"
+        )
 
 
 # ============================================================================

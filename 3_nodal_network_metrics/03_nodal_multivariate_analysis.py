@@ -72,6 +72,7 @@ def load_config(args: argparse.Namespace) -> dict:
             sys.exit(f"x run_spec not found: {spec_path}")
         with open(spec_path, "r", encoding="utf-8") as f:
             spec = json.load(f)
+        validate_run_spec_schema(spec, spec_path)
         inputs  = spec.get("inputs", {})
         outputs = spec.get("outputs", {})
         config["node_metrics_dir"] = inputs.get("node_metrics_dir")
@@ -100,6 +101,37 @@ def load_config(args: argparse.Namespace) -> dict:
     config["node_metrics_dir"] = Path(config["node_metrics_dir"]).expanduser().resolve()
     config["output_dir"]       = Path(config["output_dir"]).expanduser().resolve()
     return config
+
+
+def validate_run_spec_schema(spec: dict, spec_path: Path) -> None:
+    """Validate expected run_spec structure with explicit errors."""
+    if not isinstance(spec, dict):
+        sys.exit(f"x Invalid run_spec format in {spec_path}: top-level JSON must be an object")
+
+    inputs = spec.get("inputs")
+    outputs = spec.get("outputs")
+
+    if not isinstance(inputs, dict):
+        sys.exit(
+            f"x Invalid run_spec in {spec_path}: missing object 'inputs' with key 'node_metrics_dir'"
+        )
+    if not isinstance(outputs, dict):
+        sys.exit(
+            f"x Invalid run_spec in {spec_path}: missing object 'outputs' with key 'output_dir'"
+        )
+
+    missing_inputs = [k for k in ("node_metrics_dir",) if not inputs.get(k)]
+    missing_outputs = [k for k in ("output_dir",) if not outputs.get(k)]
+    if missing_inputs or missing_outputs:
+        msg = []
+        if missing_inputs:
+            msg.append(f"inputs: {', '.join(missing_inputs)}")
+        if missing_outputs:
+            msg.append(f"outputs: {', '.join(missing_outputs)}")
+        sys.exit(
+            f"x Invalid run_spec in {spec_path}: missing required fields ({'; '.join(msg)})\n"
+            "  Expected shape: {'inputs': {'node_metrics_dir': ...}, 'outputs': {'output_dir': ...}}"
+        )
 
 
 # ============================================================================
@@ -148,37 +180,78 @@ def detect_groups(node_df: pd.DataFrame, group_col: str, config: dict):
     Falls back to config overrides where provided.
     """
     all_groups = node_df[group_col].dropna().unique().tolist()
-    group_counts = node_df.groupby(group_col)["node"].count()
+    if len(all_groups) < 2:
+        sys.exit(f"x Need at least 2 groups for analysis. Found: {all_groups}")
 
-    # Control: smallest group or config override
-    if config.get("control_group") is not None:
-        control = config["control_group"]
+    control_override = config.get("control_group")
+    if control_override is not None:
+        if control_override not in all_groups:
+            sys.exit(
+                f"x control_group '{control_override}' not found. Available groups: {all_groups}"
+            )
+        control = control_override
     else:
-        control = group_counts.idxmin()
+        control_keywords = ["control", "ctrl", "sham", "placebo", "waitlist", "none"]
+        control_candidates = [
+            g for g in all_groups
+            if any(k in str(g).strip().lower() for k in control_keywords)
+        ]
+        if len(control_candidates) == 1:
+            control = control_candidates[0]
+        elif len(control_candidates) > 1:
+            sys.exit(
+                "x Ambiguous control group detection. Multiple control-like groups found: "
+                f"{control_candidates}. Provide control_group in run_spec or CLI."
+            )
+        else:
+            sys.exit(
+                "x Could not auto-detect control group from labels. "
+                f"Groups found: {all_groups}. Provide control_group in run_spec or CLI."
+            )
 
     intervention = [g for g in all_groups if g != control]
+    if not intervention:
+        sys.exit("x No intervention groups found after control-group detection.")
 
     # Try to infer alone/group/short/long from labels
     def match(groups, keywords):
         return [g for g in groups if any(k in str(g).lower() for k in keywords)]
+
+    def _validate_partition(name_a, values_a, name_b, values_b):
+        if not values_a or not values_b:
+            sys.exit(
+                f"x Could not determine {name_a}/{name_b} groups from labels. "
+                f"Provide {name_a}_groups and {name_b}_groups in run_spec or CLI."
+            )
+
+        unknown = [g for g in values_a + values_b if g not in intervention]
+        if unknown:
+            sys.exit(
+                f"x Unknown group(s) in {name_a}/{name_b} config: {unknown}. "
+                f"Available intervention groups: {intervention}"
+            )
+
+        overlap = sorted(set(values_a).intersection(values_b))
+        if overlap:
+            sys.exit(
+                f"x Group(s) appear in both {name_a} and {name_b}: {overlap}. "
+                "Provide non-overlapping group lists."
+            )
+
+        missing_partition = sorted(set(intervention) - set(values_a) - set(values_b))
+        if missing_partition:
+            sys.exit(
+                f"x Intervention groups not assigned to {name_a}/{name_b}: {missing_partition}. "
+                "Provide explicit complete group lists in run_spec or CLI."
+            )
 
     alone  = config.get("alone_groups")  or match(intervention, ["alone", "individual", "solo"])
     social = config.get("group_groups")  or match(intervention, ["group", "social", "team"])
     short  = config.get("short_groups")  or match(intervention, ["2w", "short", "2week", "week2"])
     long_  = config.get("long_groups")   or match(intervention, ["4w", "long",  "4week", "week4"])
 
-    # Fallback: split intervention in half by position
-    if not alone and not social and len(intervention) >= 2:
-        half   = len(intervention) // 2
-        alone  = intervention[:half]
-        social = intervention[half:]
-        print("  ! Could not detect alone/group labels — splitting intervention groups equally")
-
-    if not short and not long_ and len(intervention) >= 2:
-        half  = len(intervention) // 2
-        short = intervention[:half]
-        long_ = intervention[half:]
-        print("  ! Could not detect short/long labels — splitting intervention groups equally")
+    _validate_partition("alone", alone or [], "group", social or [])
+    _validate_partition("short", short or [], "long", long_ or [])
 
     groups = {
         "all":          all_groups,

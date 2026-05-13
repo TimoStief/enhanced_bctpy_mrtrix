@@ -47,7 +47,7 @@ Use this table to find where each of your 18 scripts goes in the new organizatio
 
    # Nodal metrics
    cp analysis_scripts/node_level_hub_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/nodal_hub_identification.py
-   cp analysis_scripts/node_temporal_trajectory_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/02_nodal_temporal_trajectories.py
+   cp analysis_scripts/node_temporal_trajectory_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/nodal_temporal_trajectories.py
    cp analysis_scripts/node_comprehensive_multivariate_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/03_nodal_multivariate_analysis.py
 
    # Classification

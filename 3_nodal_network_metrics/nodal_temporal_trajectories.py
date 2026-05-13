@@ -5,7 +5,7 @@ SCRIPT: Node-Level Temporal Trajectory Analysis
 
 PURPOSE:
     Analyzes how individual brain regions respond to intervention over time.
-    Reads node-level metrics from 02_nodal_metrics.py output.
+    Reads node-level metrics from nodal_metrics.py output.
     Intervention and control groups are auto-detected from the data.
 
 USAGE:

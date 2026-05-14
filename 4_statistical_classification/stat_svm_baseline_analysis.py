@@ -13,13 +13,13 @@ PURPOSE:
     from previous pipeline steps. Groups are auto-detected from labels.
 
 USAGE:
-    python svm_analysis.py run_spec.json
+    python svm_analysis.py CLI flags
     python svm_analysis.py --metrics-file /path/to/metrics.parquet
                            --metadata /path/to/participants.tsv
                            --output-dir /path/to/output
 
 AUTHOR: Analysis Pipeline
-VERSION: 1.0 (Auto-detection, run_spec driven)
+VERSION: 2.0 (CLI-driven, auto-detection)
 """
 
 from __future__ import annotations
@@ -42,66 +42,41 @@ warnings.filterwarnings("ignore")
 
 
 # ============================================================================
-# CLI / run_spec LOADING
+# CLI
 # ============================================================================
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="SVM analysis. Pass run_spec.json or explicit paths."
+        description="SVM baseline analysis — all inputs via CLI flags.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("run_spec",          nargs="?", help="Path to run_spec.json")
-    parser.add_argument("--metrics-file",    help="Path to metrics .parquet file (global or nodal)")
-    parser.add_argument("--metadata",        help="Participant metadata file (CSV or TSV)")
-    parser.add_argument("--output-dir",      help="Output directory")
-    parser.add_argument("--control-group",   help="Control group label (auto-detected if omitted)")
-    parser.add_argument("--alone-groups",    nargs="+", help="Alone group labels")
-    parser.add_argument("--group-groups",    nargs="+", help="Social group labels")
-    parser.add_argument("--short-groups",    nargs="+", help="Short duration labels")
-    parser.add_argument("--long-groups",     nargs="+", help="Long duration labels")
+    parser.add_argument("--metrics-file",  required=True, help="Path to metrics .parquet file")
+    parser.add_argument("--output-dir",    required=True, help="Directory where results are saved")
+    parser.add_argument("--metadata",      default=None,  help="Participant metadata file (CSV or TSV)")
+    parser.add_argument("--control-group", default=None,  help="Control group label (auto-detected if omitted)")
+    parser.add_argument("--alone-groups",  default=None,  nargs="+", help="Alone group labels")
+    parser.add_argument("--group-groups",  default=None,  nargs="+", help="Social group labels")
+    parser.add_argument("--short-groups",  default=None,  nargs="+", help="Short duration group labels")
+    parser.add_argument("--long-groups",   default=None,  nargs="+", help="Long duration group labels")
     return parser.parse_args()
 
 
-def load_config(args: argparse.Namespace) -> dict:
-    config: dict = {}
-
-    if args.run_spec:
-        spec_path = Path(args.run_spec).expanduser().resolve()
-        if not spec_path.exists():
-            sys.exit(f"x run_spec not found: {spec_path}")
-        with open(spec_path, "r", encoding="utf-8") as f:
-            spec = json.load(f)
-        inputs  = spec.get("inputs", {})
-        outputs = spec.get("outputs", {})
-        config["metrics_file"]   = inputs.get("metrics_file")
-        config["metadata_file"]  = inputs.get("metadata_file")
-        config["output_dir"]     = outputs.get("output_dir")
-        config["control_group"]  = spec.get("control_group",  None)
-        config["alone_groups"]   = spec.get("alone_groups",   None)
-        config["group_groups"]   = spec.get("group_groups",   None)
-        config["short_groups"]   = spec.get("short_groups",   None)
-        config["long_groups"]    = spec.get("long_groups",    None)
-
-    if args.metrics_file:  config["metrics_file"]  = args.metrics_file
-    if args.metadata:      config["metadata_file"] = args.metadata
-    if args.output_dir:    config["output_dir"]    = args.output_dir
-    if args.control_group: config["control_group"] = args.control_group
-    if args.alone_groups:  config["alone_groups"]  = args.alone_groups
-    if args.group_groups:  config["group_groups"]  = args.group_groups
-    if args.short_groups:  config["short_groups"]  = args.short_groups
-    if args.long_groups:   config["long_groups"]   = args.long_groups
-
-    missing = [k for k in ("metrics_file", "output_dir") if not config.get(k)]
-    if missing:
-        sys.exit(
-            f"x Missing required config: {', '.join(missing)}\n"
-            "  Provide via run_spec.json or CLI flags."
-        )
-
-    config["metrics_file"] = Path(config["metrics_file"]).expanduser().resolve()
-    config["output_dir"]   = Path(config["output_dir"]).expanduser().resolve()
-    if config.get("metadata_file"):
-        config["metadata_file"] = Path(config["metadata_file"]).expanduser().resolve()
-    return config
+def build_config(args: argparse.Namespace) -> dict:
+    """Validate paths and return config dict."""
+    metrics_file = Path(args.metrics_file).expanduser().resolve()
+    output_dir   = Path(args.output_dir).expanduser().resolve()
+    if not metrics_file.exists():
+        sys.exit(f"x Metrics file not found: {metrics_file}")
+    return {
+        "metrics_file":  metrics_file,
+        "output_dir":    output_dir,
+        "metadata_file": Path(args.metadata).expanduser().resolve() if args.metadata else None,
+        "control_group": args.control_group,
+        "alone_groups":  args.alone_groups,
+        "group_groups":  args.group_groups,
+        "short_groups":  args.short_groups,
+        "long_groups":   args.long_groups,
+    }
 
 
 # ============================================================================
@@ -204,14 +179,14 @@ def detect_groups(df: pd.DataFrame, group_col: str, config: dict) -> dict:
             "Could not detect 'alone' or 'social' groups for social effect analysis.\n"
             "  Expected labels containing: alone/individual/solo and group/social/team\n"
             f"  Found labels: {all_groups}\n"
-            "  Fix: add 'alone_groups' and 'group_groups' to run_spec.json"
+            "  Fix: add 'alone_groups' and 'group_groups' to CLI flags"
         )
     if not groups["short"] and not groups["long"]:
         warnings_list.append(
             "Could not detect 'short' or 'long' duration groups for duration analysis.\n"
             "  Expected labels containing: 2w/short/2week and 4w/long/4week\n"
             f"  Found labels: {all_groups}\n"
-            "  Fix: add 'short_groups' and 'long_groups' to run_spec.json"
+            "  Fix: add 'short_groups' and 'long_groups' to CLI flags"
         )
     for w in warnings_list:
         print(f"\n  ⚠ WARNING: {w}")
@@ -471,7 +446,7 @@ def run_variant(slopes_df: pd.DataFrame, group_col: str, sex_col: str | None,
         if not groups["alone"] or not groups["social"]:
             print(f"  x Skipping social variant — alone or social groups not detected")
             print(f"    Detected groups: {groups['all']}")
-            print(f"    Fix: add 'alone_groups' and 'group_groups' to run_spec.json")
+            print(f"    Fix: add 'alone_groups' and 'group_groups' to CLI flags")
             return {}
         group_new    = remap_groups(slopes_df[group_col], groups["alone"],
                                     groups["social"], "alone", "group",
@@ -483,7 +458,7 @@ def run_variant(slopes_df: pd.DataFrame, group_col: str, sex_col: str | None,
         if not groups["short"] or not groups["long"]:
             print(f"  x Skipping duration variant — short or long groups not detected")
             print(f"    Detected groups: {groups['all']}")
-            print(f"    Fix: add 'short_groups' and 'long_groups' to run_spec.json")
+            print(f"    Fix: add 'short_groups' and 'long_groups' to CLI flags")
             return {}
         group_new    = remap_groups(slopes_df[group_col], groups["short"],
                                     groups["long"], "2w", "4w",
@@ -551,7 +526,7 @@ def run_variant(slopes_df: pd.DataFrame, group_col: str, sex_col: str | None,
 
 def main() -> None:
     args   = parse_args()
-    config = load_config(args)
+    config = build_config(args)
 
     metrics_file  = config["metrics_file"]
     metadata_file = config.get("metadata_file")

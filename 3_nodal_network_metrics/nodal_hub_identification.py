@@ -5,16 +5,16 @@ SCRIPT: Node-Level Brain Network Analysis
 
 PURPOSE:
     Compute node-level network metrics from connectivity matrices.
-    Input/output paths are provided via run_spec.json or CLI arguments.
+    Input/output paths are provided via CLI flags or CLI arguments.
     All other parameters (n_nodes, atlas, file_format, columns) are
     automatically detected from the data.
 
 USAGE:
-    python 02_nodal_metrics.py run_spec.json
+    python 02_nodal_metrics.py CLI flags
     python 02_nodal_metrics.py --data-dir /path/to/data --metadata /path/to/meta.tsv --output-dir /path/to/out
 
 AUTHOR: Analysis Pipeline
-VERSION: 1.0 (Auto-detection, run_spec driven)
+VERSION: 2.0 (CLI-driven, auto-detection)
 """
 
 from __future__ import annotations
@@ -48,58 +48,37 @@ KINLESS_HUB_THRESHOLD    = 0.05
 
 
 # ============================================================================
-# CLI / run_spec LOADING
+# CLI
 # ============================================================================
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Node-level network metrics analysis. Pass run_spec.json or explicit paths."
+        description="Node-level hub identification — all inputs via CLI flags.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("run_spec", nargs="?", help="Path to run_spec.json")
-    parser.add_argument("--data-dir",   help="Directory with connectivity matrices")
-    parser.add_argument("--metadata",   help="Participant metadata file (CSV or TSV)")
-    parser.add_argument("--output-dir", help="Output directory")
-    parser.add_argument("--binarize", action="store_true", default=None,
+    parser.add_argument("--data-dir",    required=True, help="Directory with connectivity matrices")
+    parser.add_argument("--metadata",    required=True, help="Participant metadata file (CSV or TSV)")
+    parser.add_argument("--output-dir",  required=True, help="Directory where results are saved")
+    parser.add_argument("--binarize",    action="store_true", default=False,
                         help="Binarize connectivity matrices before analysis")
     return parser.parse_args()
 
 
-def load_config(args: argparse.Namespace) -> dict:
-    """Build config from run_spec.json and/or CLI args. CLI args override run_spec."""
-    config: dict = {}
-
-    if args.run_spec:
-        spec_path = Path(args.run_spec).expanduser().resolve()
-        if not spec_path.exists():
-            sys.exit(f"✗ run_spec not found: {spec_path}")
-        with open(spec_path, "r", encoding="utf-8") as f:
-            spec = json.load(f)
-
-        inputs  = spec.get("inputs", {})
-        outputs = spec.get("outputs", {})
-        config["data_dir"]      = inputs.get("data_dir")
-        config["metadata_file"] = inputs.get("metadata_file")
-        config["output_dir"]    = outputs.get("output_dir")
-        config["binarize"]      = spec.get("binarize", False)
-
-    if args.data_dir:    config["data_dir"]      = args.data_dir
-    if args.metadata:    config["metadata_file"] = args.metadata
-    if args.output_dir:  config["output_dir"]    = args.output_dir
-    if args.binarize is not None:
-        config["binarize"] = args.binarize
-
-    missing = [k for k in ("data_dir", "metadata_file", "output_dir") if not config.get(k)]
-    if missing:
-        sys.exit(
-            f"✗ Missing required config: {', '.join(missing)}\n"
-            "  Provide via run_spec.json or CLI flags (--data-dir, --metadata, --output-dir)"
-        )
-
-    config["data_dir"]      = Path(config["data_dir"]).expanduser().resolve()
-    config["metadata_file"] = Path(config["metadata_file"]).expanduser().resolve()
-    config["output_dir"]    = Path(config["output_dir"]).expanduser().resolve()
-    config.setdefault("binarize", False)
-    return config
+def build_config(args: argparse.Namespace) -> dict:
+    """Validate paths and return config dict."""
+    data_dir      = Path(args.data_dir).expanduser().resolve()
+    metadata_file = Path(args.metadata).expanduser().resolve()
+    output_dir    = Path(args.output_dir).expanduser().resolve()
+    if not data_dir.exists():
+        sys.exit(f"x Data directory not found: {data_dir}")
+    if not metadata_file.exists():
+        sys.exit(f"x Metadata file not found: {metadata_file}")
+    return {
+        "data_dir":      data_dir,
+        "metadata_file": metadata_file,
+        "output_dir":    output_dir,
+        "binarize":      args.binarize,
+    }
 
 
 # ============================================================================
@@ -450,7 +429,7 @@ def make_plots(summary_df: pd.DataFrame, plot_dir: Path,
 
 def main() -> None:
     args   = parse_args()
-    config = load_config(args)
+    config = build_config(args)
 
     data_dir:      Path = config["data_dir"]
     metadata_file: Path = config["metadata_file"]

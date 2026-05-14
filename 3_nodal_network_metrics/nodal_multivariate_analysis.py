@@ -16,11 +16,11 @@ PURPOSE:
     Input is the node_level_metrics.parquet from 02_nodal_metrics.py.
 
 USAGE:
-    python 04_nodal_comprehensive_analysis.py run_spec.json
+    python 04_nodal_comprehensive_analysis.py CLI flags
     python 04_nodal_comprehensive_analysis.py --node-metrics-dir /path/to/dir --output-dir /path/to/out
 
 AUTHOR: Analysis Pipeline
-VERSION: 1.0 (Auto-detection, run_spec driven)
+VERSION: 2.0 (CLI-driven, auto-detection)
 """
 
 from __future__ import annotations
@@ -45,61 +45,34 @@ import seaborn as sns
 
 
 # ============================================================================
-# CLI / run_spec LOADING
+# CLI
 # ============================================================================
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Node-level comprehensive analysis. Pass run_spec.json or explicit paths."
+        description="Node-level multivariate analysis — all inputs via CLI flags.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("run_spec",            nargs="?", help="Path to run_spec.json")
-    parser.add_argument("--node-metrics-dir",  help="Directory with node_level_metrics.parquet")
-    parser.add_argument("--output-dir",        help="Output directory")
-    parser.add_argument("--control-group",     help="Control group label (auto-detected if omitted)")
-    parser.add_argument("--alone-groups",      nargs="+", help="Alone group labels (auto-detected if omitted)")
-    parser.add_argument("--group-groups",      nargs="+", help="Group intervention labels (auto-detected if omitted)")
-    parser.add_argument("--short-groups",      nargs="+", help="Short duration labels (auto-detected if omitted)")
-    parser.add_argument("--long-groups",       nargs="+", help="Long duration labels (auto-detected if omitted)")
+    parser.add_argument("--node-metrics-dir", required=True,
+                        help="Directory containing node_level_metrics.parquet")
+    parser.add_argument("--output-dir",       required=True,
+                        help="Directory where results are saved")
+    parser.add_argument("--metadata",         default=None,
+                        help="Participant metadata file (CSV or TSV)")
     return parser.parse_args()
 
 
-def load_config(args: argparse.Namespace) -> dict:
-    config: dict = {}
-
-    if args.run_spec:
-        spec_path = Path(args.run_spec).expanduser().resolve()
-        if not spec_path.exists():
-            sys.exit(f"x run_spec not found: {spec_path}")
-        with open(spec_path, "r", encoding="utf-8") as f:
-            spec = json.load(f)
-        inputs  = spec.get("inputs", {})
-        outputs = spec.get("outputs", {})
-        config["node_metrics_dir"] = inputs.get("node_metrics_dir")
-        config["output_dir"]       = outputs.get("output_dir")
-        config["control_group"]    = spec.get("control_group",  None)
-        config["alone_groups"]     = spec.get("alone_groups",   None)
-        config["group_groups"]     = spec.get("group_groups",   None)
-        config["short_groups"]     = spec.get("short_groups",   None)
-        config["long_groups"]      = spec.get("long_groups",    None)
-
-    if args.node_metrics_dir: config["node_metrics_dir"] = args.node_metrics_dir
-    if args.output_dir:       config["output_dir"]       = args.output_dir
-    if args.control_group:    config["control_group"]    = args.control_group
-    if args.alone_groups:     config["alone_groups"]     = args.alone_groups
-    if args.group_groups:     config["group_groups"]     = args.group_groups
-    if args.short_groups:     config["short_groups"]     = args.short_groups
-    if args.long_groups:      config["long_groups"]      = args.long_groups
-
-    missing = [k for k in ("node_metrics_dir", "output_dir") if not config.get(k)]
-    if missing:
-        sys.exit(
-            f"x Missing required config: {', '.join(missing)}\n"
-            "  Provide via run_spec.json or CLI flags."
-        )
-
-    config["node_metrics_dir"] = Path(config["node_metrics_dir"]).expanduser().resolve()
-    config["output_dir"]       = Path(config["output_dir"]).expanduser().resolve()
-    return config
+def build_config(args: argparse.Namespace) -> dict:
+    """Validate paths and return config dict."""
+    node_metrics_dir = Path(args.node_metrics_dir).expanduser().resolve()
+    output_dir       = Path(args.output_dir).expanduser().resolve()
+    if not node_metrics_dir.exists():
+        sys.exit(f"x Node metrics directory not found: {node_metrics_dir}")
+    return {
+        "node_metrics_dir": node_metrics_dir,
+        "output_dir":       output_dir,
+        "metadata_file":    Path(args.metadata).expanduser().resolve() if args.metadata else None,
+    }
 
 
 # ============================================================================
@@ -433,7 +406,7 @@ def print_summary(results: dict) -> None:
 
 def main() -> None:
     args   = parse_args()
-    config = load_config(args)
+    config = build_config(args)
 
     node_metrics_dir = config["node_metrics_dir"]
     output_dir       = config["output_dir"]

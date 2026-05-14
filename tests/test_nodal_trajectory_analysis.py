@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import importlib
 traj = importlib.import_module("nodal_temporal_trajectories")
 
-load_config                  = traj.load_config
 detect_group_col             = traj.detect_group_col
 detect_session_col           = traj.detect_session_col
 detect_metric_cols           = traj.detect_metric_cols
@@ -67,59 +66,56 @@ def _make_trajectory_df(n_nodes=3):
     return pd.DataFrame(records)
 
 
-def _make_run_spec(tmp_path):
+def _make_cli_args(tmp_path):
+    """Erstellt CLI-Argumente mit echten Pfaden und Testdaten."""
+    import numpy as np, pandas as pd
     node_dir = tmp_path / "node_metrics"
-    node_dir.mkdir()
+    node_dir.mkdir(exist_ok=True)
     out_dir  = tmp_path / "output"
+    rng = np.random.default_rng(0)
+    rows = []
+    for grp in ["ctrl", "int"]:
+        for s in range(5):
+            for ses in ["ses-1", "ses-2", "ses-3"]:
+                rows.append({"participant_id": f"{grp}_sub{s:02d}",
+                             "session": ses, "group": grp, "node": 0,
+                             "metric_a": rng.normal(), "metric_b": rng.normal()})
+    pd.DataFrame(rows).to_parquet(node_dir / "node_level_metrics.parquet", index=False)
+    cli_args = ["--node-metrics-dir", str(node_dir), "--output-dir", str(out_dir)]
+    return cli_args, node_dir, out_dir
 
-    # Echte parquet Datei erstellen
-    node_df = _make_node_df(n_nodes=3,
-                             groups=["A", "A", "A", "B", "B", "B"],
-                             sessions=[1, 2, 3, 1, 2, 3])
-    node_df.to_parquet(node_dir / "node_level_metrics.parquet", index=False)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# build_config
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_build_config_from_cli(tmp_path):
+    cli_args, node_dir, out_dir = _make_cli_args(tmp_path)
     spec = {
         "inputs":  {"node_metrics_dir": str(node_dir)},
         "outputs": {"output_dir": str(out_dir)},
     }
-    spec_file = tmp_path / "run_spec.json"
-    spec_file.write_text(json.dumps(spec))
-    return spec_file, node_dir, out_dir
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# load_config
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def test_load_config_from_run_spec(tmp_path):
-    _, node_dir, out_dir = _make_run_spec(tmp_path)
-    spec = {
-        "inputs":  {"node_metrics_dir": str(node_dir)},
-        "outputs": {"output_dir": str(out_dir)},
-    }
-    spec_file = tmp_path / "run_spec.json"
-    spec_file.write_text(json.dumps(spec))
-
-    with patch("sys.argv", ["script", str(spec_file)]):
+    with patch("sys.argv", ["script"] + cli_args):
         args   = traj.parse_args()
-        config = load_config(args)
+        config = build_config(args)
 
     assert config["node_metrics_dir"] == node_dir
     assert config["output_dir"]       == out_dir
 
 
-def test_load_config_missing_exits(tmp_path):
+def test_build_config_missing_exits(tmp_path):
     with patch("sys.argv", ["script"]):
         args = traj.parse_args()
         with pytest.raises(SystemExit):
-            load_config(args)
+            build_config(args)
 
 
-def test_load_config_missing_run_spec(tmp_path):
-    with patch("sys.argv", ["script", str(tmp_path / "nope.json")]):
+def test_build_config_missing_node_dir(tmp_path):
+    with patch("sys.argv", ["script", "--node-metrics-dir", str(tmp_path / "nope"), "--output-dir", str(tmp_path / "out")]):
         args = traj.parse_args()
         with pytest.raises(SystemExit):
-            load_config(args)
+            build_config(args)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -400,9 +396,9 @@ def test_make_plots_empty_effects_no_crash(tmp_path):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_main_runs_successfully(tmp_path):
-    spec_file, _, out_dir = _make_run_spec(tmp_path)
+    cli_args, _, out_dir = _make_cli_args(tmp_path)
 
-    with patch("sys.argv", ["script", str(spec_file)]):
+    with patch("sys.argv", ["script"] + cli_args):
         main()
 
     assert (out_dir / "node_trajectories.parquet").exists()
@@ -417,31 +413,28 @@ def test_main_missing_parquet_exits(tmp_path):
         "inputs":  {"node_metrics_dir": str(node_dir)},
         "outputs": {"output_dir": str(out_dir)},
     }
-    spec_file = tmp_path / "run_spec.json"
-    spec_file.write_text(json.dumps(spec))
 
-    with patch("sys.argv", ["script", str(spec_file)]):
+    with patch("sys.argv", ["script"] + cli_args):
         with pytest.raises(SystemExit):
             main()
 
 
-def test_main_missing_run_spec(tmp_path):
-    with patch("sys.argv", ["script", str(tmp_path / "nope.json")]):
+def test_main_missing_node_dir(tmp_path):
+    with patch("sys.argv", ["script", "--node-metrics-dir", str(tmp_path / "nope"), "--output-dir", str(tmp_path / "out")]):
         with pytest.raises(SystemExit):
             main()
 
 
 def test_main_with_control_group_config(tmp_path):
     """Control group aus Config wird korrekt verwendet."""
-    spec_file, node_dir, out_dir = _make_run_spec(tmp_path)
+    cli_args, _, out_dir = _make_cli_args(tmp_path)
     spec = {
         "inputs":        {"node_metrics_dir": str(node_dir)},
         "outputs":       {"output_dir": str(out_dir)},
         "control_group": "B",
     }
-    spec_file.write_text(json.dumps(spec))
 
-    with patch("sys.argv", ["script", str(spec_file)]):
+    with patch("sys.argv", ["script"] + cli_args):
         main()
 
     assert (out_dir / "node_trajectories.parquet").exists()

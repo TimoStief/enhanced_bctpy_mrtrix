@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import importlib
 comp = importlib.import_module("nodal_multivariate_analysis")
 
-load_config                = comp.load_config
 detect_columns             = comp.detect_columns
 detect_groups              = comp.detect_groups
 detect_n_nodes             = comp.detect_n_nodes
@@ -54,24 +53,23 @@ def _make_node_df(n_nodes=3, n_per_group=5):
     return pd.DataFrame(records)
 
 
-def _make_run_spec(tmp_path, n_nodes=3, n_per_group=5):
+def _make_cli_args(tmp_path, n_nodes=3, n_per_group=5):
+    """Erstellt CLI-Argumente mit echten Pfaden und Testdaten."""
+    import numpy as np, pandas as pd
     node_dir = tmp_path / "node_metrics"
-    node_dir.mkdir()
+    node_dir.mkdir(exist_ok=True)
     out_dir  = tmp_path / "output"
-    node_df  = _make_node_df(n_nodes=n_nodes, n_per_group=n_per_group)
-    node_df.to_parquet(node_dir / "node_level_metrics.parquet", index=False)
-    spec = {
-        "inputs":  {"node_metrics_dir": str(node_dir)},
-        "outputs": {"output_dir": str(out_dir)},
-        "control_group": "control",
-        "alone_groups":  ["alone_2w", "alone_4w"],
-        "group_groups":  ["group_2w", "group_4w"],
-        "short_groups":  ["alone_2w", "group_2w"],
-        "long_groups":   ["alone_4w", "group_4w"],
-    }
-    spec_file = tmp_path / "run_spec.json"
-    spec_file.write_text(json.dumps(spec))
-    return spec_file, node_dir, out_dir
+    rng = np.random.default_rng(0)
+    rows = []
+    for grp in ["ctrl", "int"]:
+        for s in range(n_per_group):
+            for nd in range(n_nodes):
+                rows.append({"participant_id": f"{grp}_sub{s:02d}",
+                             "session": "ses-1", "group": grp, "node": nd,
+                             "metric_a": rng.normal(), "metric_b": rng.normal()})
+    pd.DataFrame(rows).to_parquet(node_dir / "node_level_metrics.parquet", index=False)
+    cli_args = ["--node-metrics-dir", str(node_dir), "--output-dir", str(out_dir)]
+    return cli_args, node_dir, out_dir
 
 
 def _make_results(empty=False):
@@ -92,30 +90,30 @@ def _make_results(empty=False):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# load_config
+# build_config
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_load_config_from_run_spec(tmp_path):
-    spec_file, node_dir, out_dir = _make_run_spec(tmp_path)
-    with patch("sys.argv", ["script", str(spec_file)]):
+def test_build_config_from_cli(tmp_path):
+    cli_args, _, out_dir = _make_cli_args(tmp_path)
+    with patch("sys.argv", ["script"] + cli_args):
         args   = comp.parse_args()
-        config = load_config(args)
+        config = build_config(args)
     assert config["node_metrics_dir"] == node_dir
     assert config["control_group"]    == "control"
 
 
-def test_load_config_missing_exits(tmp_path):
+def test_build_config_missing_exits(tmp_path):
     with patch("sys.argv", ["script"]):
         args = comp.parse_args()
         with pytest.raises(SystemExit):
-            load_config(args)
+            build_config(args)
 
 
-def test_load_config_missing_run_spec(tmp_path):
-    with patch("sys.argv", ["script", str(tmp_path / "nope.json")]):
+def test_build_config_missing_node_dir(tmp_path):
+    with patch("sys.argv", ["script", "--node-metrics-dir", str(tmp_path / "nope"), "--output-dir", str(tmp_path / "out")]):
         args = comp.parse_args()
         with pytest.raises(SystemExit):
-            load_config(args)
+            build_config(args)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -391,8 +389,8 @@ def test_print_summary_empty_no_crash():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_main_runs_successfully(tmp_path):
-    spec_file, _, out_dir = _make_run_spec(tmp_path, n_nodes=2, n_per_group=5)
-    with patch("sys.argv", ["script", str(spec_file)]):
+    cli_args, _, out_dir = _make_cli_args(tmp_path, n_nodes=2, n_per_group=5)
+    with patch("sys.argv", ["script"] + cli_args):
         main()
     assert (out_dir / "five_group_anova.parquet").exists()
     assert (out_dir / "social_effects.parquet").exists()
@@ -406,22 +404,20 @@ def test_main_missing_parquet_exits(tmp_path):
         "inputs":  {"node_metrics_dir": str(node_dir)},
         "outputs": {"output_dir": str(tmp_path / "out")},
     }
-    spec_file = tmp_path / "run_spec.json"
-    spec_file.write_text(json.dumps(spec))
-    with patch("sys.argv", ["script", str(spec_file)]):
+    with patch("sys.argv", ["script"] + cli_args):
         with pytest.raises(SystemExit):
             main()
 
 
-def test_main_missing_run_spec(tmp_path):
-    with patch("sys.argv", ["script", str(tmp_path / "nope.json")]):
+def test_main_missing_node_dir(tmp_path):
+    with patch("sys.argv", ["script", "--node-metrics-dir", str(tmp_path / "nope"), "--output-dir", str(tmp_path / "out")]):
         with pytest.raises(SystemExit):
             main()
 
 
 def test_main_saves_all_outputs(tmp_path):
-    spec_file, _, out_dir = _make_run_spec(tmp_path, n_nodes=2, n_per_group=5)
-    with patch("sys.argv", ["script", str(spec_file)]):
+    cli_args, _, out_dir = _make_cli_args(tmp_path, n_nodes=2, n_per_group=5)
+    with patch("sys.argv", ["script"] + cli_args):
         main()
     expected = [
         "five_group_anova.parquet",

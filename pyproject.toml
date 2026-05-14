@@ -31,6 +31,7 @@ python_files = [
     "test_nodal_trajectory_analysis.py",
     "test_preflight_check.py",
     "test_stat_svm_baseline_analysis.py",
+    "test_stat_svm_time_effects.py"
 ]
 
 pythonpath = [

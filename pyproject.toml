@@ -24,6 +24,15 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
+python_files = [
+    "test_global_basic_metrics.py",
+    "test_nodal_hub_identification.py",
+    "test_nodal_multivariate_analysis.py",
+    "test_nodal_trajectory_analysis.py",
+    "test_preflight_check.py",
+    "test_stat_svm_baseline_analysis.py",
+]
+
 pythonpath = [
     ".",
     "0_installation",

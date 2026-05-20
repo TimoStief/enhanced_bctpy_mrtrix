@@ -32,7 +32,9 @@ python_files = [
     "test_preflight_check.py",
     "test_stat_svm_baseline_analysis.py",
     "test_stat_svm_time_effects.py",
-    "test_stat_svm_stratified.py"
+    "test_stat_svm_stratified.py",
+    "test_stat_svm_time_5groups.py",
+    "test_stat_random_forest_comparison.py"
 ]
 
 pythonpath = [

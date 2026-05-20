@@ -9,7 +9,7 @@ import sys
 
 
 def main() -> None:
-    target = Path(__file__).resolve().parents[2] / "0_installation" / "preflight_check.py"
+    target = Path(__file__).resolve().parents[1] / "0_installation" / "preflight_check.py"
     if not target.exists():
         raise FileNotFoundError(f"Preflight script not found: {target}")
 

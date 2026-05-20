@@ -5,15 +5,15 @@ SCRIPT: Node-Level Temporal Trajectory Analysis
 
 PURPOSE:
     Analyzes how individual brain regions respond to intervention over time.
-    Reads node-level metrics from nodal_metrics.py output.
+    Reads node-level metrics from 02_nodal_metrics.py output.
     Intervention and control groups are auto-detected from the data.
 
 USAGE:
-    python 03_node_trajectory.py CLI flags
+    python 03_node_trajectory.py run_spec.json
     python 03_node_trajectory.py --node-metrics-dir /path/to/node_level_analysis --output-dir /path/to/out
 
 AUTHOR: Analysis Pipeline
-VERSION: 2.0 (CLI-driven, auto-detection)
+VERSION: 1.0 (Auto-detection, run_spec driven)
 """
 
 from __future__ import annotations
@@ -37,34 +37,49 @@ import seaborn as sns
 
 
 # ============================================================================
-# CLI
+# CLI / run_spec LOADING
 # ============================================================================
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Node trajectory analysis — all inputs via CLI flags.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Node trajectory analysis. Pass run_spec.json or explicit paths."
     )
-    parser.add_argument("--node-metrics-dir", required=True,
-                        help="Directory containing node_level_metrics.parquet")
-    parser.add_argument("--output-dir",       required=True,
-                        help="Directory where results are saved")
-    parser.add_argument("--metadata",         default=None,
-                        help="Participant metadata file (CSV or TSV)")
+    parser.add_argument("run_spec", nargs="?", help="Path to run_spec.json")
+    parser.add_argument("--node-metrics-dir", help="Directory with node_level_metrics.parquet")
+    parser.add_argument("--output-dir",       help="Output directory")
+    parser.add_argument("--control-group",    help="Control group label (auto-detected if omitted)")
     return parser.parse_args()
 
 
-def build_config(args: argparse.Namespace) -> dict:
-    """Validate paths and return config dict."""
-    node_metrics_dir = Path(args.node_metrics_dir).expanduser().resolve()
-    output_dir       = Path(args.output_dir).expanduser().resolve()
-    if not node_metrics_dir.exists():
-        sys.exit(f"x Node metrics directory not found: {node_metrics_dir}")
-    return {
-        "node_metrics_dir": node_metrics_dir,
-        "output_dir":       output_dir,
-        "metadata_file":    Path(args.metadata).expanduser().resolve() if args.metadata else None,
-    }
+def load_config(args: argparse.Namespace) -> dict:
+    config: dict = {}
+
+    if args.run_spec:
+        spec_path = Path(args.run_spec).expanduser().resolve()
+        if not spec_path.exists():
+            sys.exit(f"x run_spec not found: {spec_path}")
+        with open(spec_path, "r", encoding="utf-8") as f:
+            spec = json.load(f)
+        inputs  = spec.get("inputs", {})
+        outputs = spec.get("outputs", {})
+        config["node_metrics_dir"] = inputs.get("node_metrics_dir")
+        config["output_dir"]       = outputs.get("output_dir")
+        config["control_group"]    = spec.get("control_group", None)
+
+    if args.node_metrics_dir: config["node_metrics_dir"] = args.node_metrics_dir
+    if args.output_dir:       config["output_dir"]       = args.output_dir
+    if args.control_group:    config["control_group"]    = args.control_group
+
+    missing = [k for k in ("node_metrics_dir", "output_dir") if not config.get(k)]
+    if missing:
+        sys.exit(
+            f"x Missing required config: {', '.join(missing)}\n"
+            "  Provide via run_spec.json or CLI flags (--node-metrics-dir, --output-dir)"
+        )
+
+    config["node_metrics_dir"] = Path(config["node_metrics_dir"]).expanduser().resolve()
+    config["output_dir"]       = Path(config["output_dir"]).expanduser().resolve()
+    return config
 
 
 # ============================================================================
@@ -332,7 +347,7 @@ def make_plots(effects_df, hub_df, trajectory_df, plot_dir):
 
 def main() -> None:
     args   = parse_args()
-    config = build_config(args)
+    config = load_config(args)
 
     node_metrics_dir = config["node_metrics_dir"]
     output_dir       = config["output_dir"]

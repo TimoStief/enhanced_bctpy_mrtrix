@@ -47,13 +47,13 @@ Use this table to find where each of your 18 scripts goes in the new organizatio
 
    # Nodal metrics
    cp analysis_scripts/node_level_hub_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/nodal_hub_identification.py
-   cp analysis_scripts/node_temporal_trajectory_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/nodal_temporal_trajectories.py
-   cp analysis_scripts/node_comprehensive_multivariate_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/nodal_multivariate_analysis.py
+   cp analysis_scripts/node_temporal_trajectory_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/02_nodal_temporal_trajectories.py
+   cp analysis_scripts/node_comprehensive_multivariate_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/03_nodal_multivariate_analysis.py
 
    # Classification
-   cp analysis_scripts/svm_design_variants_analysis.py analysis_scripts_restructured/4_statistical_classification/test_stat_svm_baseline_analysis.py
-   cp analysis_scripts/svm_time_effect_analysis.py analysis_scripts_restructured/4_statistical_classification/stat_svm_time_effects.py
-   cp analysis_scripts/svm_stratified_analysis_5groups.py analysis_scripts_restructured/4_statistical_classification/stat_svm_stratified_5groups.py
+   cp analysis_scripts/svm_design_variants_analysis.py analysis_scripts_restructured/4_statistical_classification/01_svm_baseline_analysis.py
+   cp analysis_scripts/svm_time_effect_analysis.py analysis_scripts_restructured/4_statistical_classification/02_svm_time_effects.py
+   cp analysis_scripts/svm_stratified_analysis_5groups.py analysis_scripts_restructured/4_statistical_classification/03_svm_stratified_5groups.py
    cp analysis_scripts/svm_time_effect_analysis_5groups.py analysis_scripts_restructured/4_statistical_classification/04_svm_time_5groups.py
    cp analysis_scripts/rf_vs_svm_design_variants.py analysis_scripts_restructured/4_statistical_classification/05_random_forest_comparison.py
 

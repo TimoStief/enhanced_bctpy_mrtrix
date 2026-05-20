@@ -195,3 +195,31 @@ def test_main_wrong_venv(tmp_path):
             main()
 
     assert exc.value.code == 3
+
+
+def test_main_without_script_is_allowed(tmp_path, capsys):
+    """main() akzeptiert run_spec ohne script und prüft nur Pfade/Pakete."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    metadata = tmp_path / "meta.tsv"
+    metadata.write_text("participant_id\tsession\nSUB01\t1\n")
+
+    spec = {
+        "inputs": {
+            "data_dir": str(data_dir),
+            "metadata_file": str(metadata),
+        },
+        "outputs": {
+            "output_dir": str(tmp_path / "output"),
+        },
+    }
+    spec_file = tmp_path / "run_spec.json"
+    spec_file.write_text(json.dumps(spec))
+
+    with patch("sys.argv", ["preflight_check.py", str(spec_file)]):
+        with patch("preflight_check.check_imports", return_value=[]):
+            main()
+
+    captured = capsys.readouterr()
+    assert "Script not specified" in captured.out
+    assert "✓ Data directory" in captured.out

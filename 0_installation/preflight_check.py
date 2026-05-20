@@ -82,12 +82,23 @@ def main() -> None:
 
     spec_dir = Path(spec["_spec_dir"]).resolve()
 
-    script_path = resolve_path(spec_dir, spec.get("script", ""))
-    if not script_path.exists():
-        raise FileNotFoundError(f"Script not found: {script_path}")
+    script_path = None
+    script_raw = spec.get("script")
+    if script_raw:
+        script_path = resolve_path(spec_dir, script_raw)
+        if not script_path.exists():
+            raise FileNotFoundError(f"Script not found: {script_path}")
 
     inputs = spec.get("inputs", {})
     outputs = spec.get("outputs", {})
+
+    required_inputs = [k for k in ("data_dir", "metadata_file") if not inputs.get(k)]
+    if required_inputs:
+        raise ValueError(
+            "Missing required inputs in run_spec: " + ", ".join(required_inputs)
+        )
+    if not outputs.get("output_dir"):
+        raise ValueError("Missing required outputs.output_dir in run_spec")
 
     data_dir = resolve_path(spec_dir, inputs.get("data_dir", ""))
     metadata_file = resolve_path(spec_dir, inputs.get("metadata_file", ""))
@@ -100,7 +111,10 @@ def main() -> None:
 
     missing = check_imports(REQUIRED_PACKAGES)
 
-    print("✓ Script found:", script_path)
+    if script_path is not None:
+        print("✓ Script found:", script_path)
+    else:
+        print("! Script not specified in run_spec (path checks only)")
     print("✓ Data directory:", data_dir)
     print("✓ Metadata file:", metadata_file)
     print("✓ Output directory (will be created if needed):", output_dir)

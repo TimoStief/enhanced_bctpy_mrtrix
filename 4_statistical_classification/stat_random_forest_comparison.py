@@ -39,6 +39,8 @@ from sklearn.svm import SVC
 
 warnings.filterwarnings("ignore")
 
+# Local
+from group_detection import detect_or_ask_groups
 
 # ============================================================================
 # CLI / run_spec
@@ -422,7 +424,8 @@ def main() -> None:
         sys.exit("x Could not detect group column.")
 
     print("\nAuto-detecting groups...")
-    groups = detect_groups(df, group_col, config)
+    run_spec_path = Path(args.run_spec) if args.run_spec else None
+    groups = detect_or_ask_groups(df, group_col, config, run_spec_path)
 
     print("\nCalculating slopes...")
     slopes_df = calculate_slopes(df, cols)

@@ -40,6 +40,8 @@ from sklearn.svm import SVC
 
 warnings.filterwarnings("ignore")
 
+# Local
+from group_detection import detect_or_ask_groups
 
 # ============================================================================
 # CLI
@@ -550,7 +552,7 @@ def main() -> None:
     # Merge metadata if provided
     if metadata_file:
         df = load_metrics(metrics_file, metadata_file, cols)
-        cols = detect_columns(df)  # re-detect after merge
+        cols = detect_columns(df)
     else:
         df = raw_df
 
@@ -560,9 +562,9 @@ def main() -> None:
     # Re-detect after aggregation
     cols = detect_columns(df)
 
-    group_col   = cols["group_col"]
-    sex_col     = cols["sex_col"]
-    age_col     = cols["age_col"]
+    group_col = cols["group_col"]
+    sex_col = cols["sex_col"]
+    age_col = cols["age_col"]
     subject_col = cols["subject_col"]
 
     if not group_col:
@@ -573,9 +575,9 @@ def main() -> None:
         )
 
     print("\nAuto-detecting groups...")
-    groups = detect_groups(df, group_col, config)
+    run_spec_path = Path(args.run_spec) if args.run_spec else None
+    groups = detect_or_ask_groups(df, group_col, config, run_spec_path)
     print()
-
     # ── Slopes ─────────────────────────────────────────────────────────────
     print("Calculating slopes...")
     slopes_df = calculate_slopes(df, cols)

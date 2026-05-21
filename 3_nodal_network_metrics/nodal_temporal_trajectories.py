@@ -35,6 +35,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Local
+from group_detection import detect_or_ask_groups
 
 # ============================================================================
 # CLI / run_spec LOADING
@@ -370,19 +372,14 @@ def main() -> None:
 
     # Auto-detection
     print("\nAuto-detecting data structure...")
-    group_col   = detect_group_col(node_df)
+    group_col = detect_group_col(node_df)
     session_col = detect_session_col(node_df)
     metric_cols = detect_metric_cols(node_df)
-    n_nodes     = detect_n_nodes(node_df)
-
-    if config.get("control_group"):
-        control_group       = config["control_group"]
-        intervention_groups = [g for g in node_df[group_col].unique()
-                                if g != control_group]
-        print(f"  + Control group (from config): {control_group}")
-        print(f"  + Intervention groups: {intervention_groups}")
-    else:
-        intervention_groups, control_group = detect_groups(node_df, group_col)
+    n_nodes = detect_n_nodes(node_df)
+    run_spec_path = Path(args.run_spec) if args.run_spec else None
+    groups = detect_or_ask_groups(node_df, group_col, config, run_spec_path)
+    intervention_groups = groups["intervention"]
+    control_group = groups["control"]
     print()
 
     # Trajectories

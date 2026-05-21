@@ -43,6 +43,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Local
+from group_detection import detect_or_ask_groups
+
 
 # ============================================================================
 # CLI / run_spec LOADING
@@ -456,14 +459,15 @@ def main() -> None:
 
     # ── Auto-detection ─────────────────────────────────────────────────────
     print("\nAuto-detecting data structure...")
-    cols        = detect_columns(node_df)
-    group_col   = cols["group_col"]
-    sex_col     = cols["sex_col"]
-    age_col     = cols["age_col"]
+    cols = detect_columns(node_df)
+    group_col = cols["group_col"]
+    sex_col = cols["sex_col"]
+    age_col = cols["age_col"]
     metric_cols = cols["metric_cols"]
-    n_nodes     = detect_n_nodes(node_df)
-    groups      = detect_groups(node_df, group_col, config)
-    node_df     = normalize_sex(node_df, sex_col)
+    n_nodes = detect_n_nodes(node_df)
+    run_spec_path = Path(args.run_spec) if args.run_spec else None
+    groups = detect_or_ask_groups(node_df, group_col, config, run_spec_path)
+    node_df = normalize_sex(node_df, sex_col)
     print()
 
     results = {}

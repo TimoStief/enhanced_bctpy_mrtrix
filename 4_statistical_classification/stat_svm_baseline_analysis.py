@@ -48,6 +48,17 @@ from group_detection import detect_or_ask_groups
 # CLI
 # ============================================================================
 
+
+def _progress(current, total, desc):
+    """Simple progress display without external dependencies."""
+    pct = current / total * 100 if total > 0 else 0
+    bar_len = 30
+    filled = int(bar_len * current / total) if total > 0 else 0
+    bar = "█" * filled + "░" * (bar_len - filled)
+    print(f"  {desc}: |{bar}| {current}/{total} ({pct:.0f}%)", end="\r", flush=True)
+    if current == total:
+        print()
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="SVM baseline analysis — all inputs via CLI flags.",
@@ -265,12 +276,10 @@ def calculate_slopes(df: pd.DataFrame, cols: dict) -> pd.DataFrame:
     metric_cols = [c for c in cols["metric_cols"] if c in df.columns]
 
     records = []
-    _subjects = df[subject_col].unique()
-    _total = len(_subjects)
-    for _i, (subject, subj_data) in enumerate(df.groupby(subject_col)):
-        if _i % 5 == 0 or _i == _total - 1:
-            print(f"  Calculating slopes: {_i+1}/{_total} ({(_i+1)/_total*100:.0f}%)", end="
-")
+    _subjects_list = list(df.groupby(subject_col))
+    _total_s = len(_subjects_list)
+    for _i_s, (subject, subj_data) in enumerate(_subjects_list):
+        _progress(_i_s + 1, _total_s, "Calculating slopes")
         subj_data = subj_data.sort_values(session_col)
         if len(subj_data) < 2:
             continue
@@ -543,7 +552,7 @@ def main() -> None:
 
     print("=" * 70)
     _start_time = datetime.now()
-    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
+    print("  Started:  " + _start_time.strftime("%Y-%m-%d %H:%M:%S"))
     print("SVM ANALYSIS")
     print("=" * 70)
     print(f"Metrics file: {metrics_file}")

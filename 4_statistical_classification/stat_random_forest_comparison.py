@@ -47,6 +47,17 @@ from group_detection import detect_or_ask_groups
 # CLI / run_spec
 # ============================================================================
 
+
+def _progress(current, total, desc):
+    """Simple progress display without external dependencies."""
+    pct = current / total * 100 if total > 0 else 0
+    bar_len = 30
+    filled = int(bar_len * current / total) if total > 0 else 0
+    bar = "█" * filled + "░" * (bar_len - filled)
+    print(f"  {desc}: |{bar}| {current}/{total} ({pct:.0f}%)", end="\r", flush=True)
+    if current == total:
+        print()
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RF vs SVM comparison.")
     parser.add_argument("run_spec",          nargs="?", help="Path to run_spec.json")
@@ -209,12 +220,10 @@ def calculate_slopes(df: pd.DataFrame, cols: dict) -> pd.DataFrame:
     metric_cols = [c for c in cols["metric_cols"] if c in df.columns]
 
     records = []
-    _subjects = df[subj_col].unique()
-    _total = len(_subjects)
-    for _i, (subj, sdata) in enumerate(df.groupby(subj_col)):
-        if _i % 5 == 0 or _i == _total - 1:
-            print(f"  Calculating slopes: {_i+1}/{_total} ({(_i+1)/_total*100:.0f}%)", end="
-")
+    _subjects_list = list(df.groupby(subj_col))
+    _total_s = len(_subjects_list)
+    for _i_s, (subj, sdata) in enumerate(_subjects_list):
+        _progress(_i_s + 1, _total_s, "Calculating slopes")
         sdata = sdata.sort_values(session_col)
         if len(sdata) < 2:
             continue
@@ -415,7 +424,7 @@ def main() -> None:
 
     print("=" * 70)
     _start_time = datetime.now()
-    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
+    print("  Started:  " + _start_time.strftime("%Y-%m-%d %H:%M:%S"))
     print("RF vs SVM COMPARISON")
     print("=" * 70)
 
@@ -467,9 +476,9 @@ def main() -> None:
     print("\n" + "=" * 70)
     print("ANALYSIS COMPLETE")
     print("=" * 70)
-    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
-    print(f"  Finished: {_end_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
-    print(f"  Duration: {str(_duration).split(\'.\')[0]}")
+    print("  Started:  " + _start_time.strftime("%Y-%m-%d %H:%M:%S"))
+    print("  Finished: " + _end_time.strftime("%Y-%m-%d %H:%M:%S"))
+    print("  Duration: " + str(_duration).split(".")[0])
 
 
 if __name__ == "__main__":

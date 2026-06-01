@@ -43,6 +43,17 @@ from group_detection import detect_or_ask_groups
 # CLI / run_spec LOADING
 # ============================================================================
 
+
+def _progress(current, total, desc):
+    """Simple progress display without external dependencies."""
+    pct = current / total * 100 if total > 0 else 0
+    bar_len = 30
+    filled = int(bar_len * current / total) if total > 0 else 0
+    bar = "█" * filled + "░" * (bar_len - filled)
+    print(f"  {desc}: |{bar}| {current}/{total} ({pct:.0f}%)", end="\r", flush=True)
+    if current == total:
+        print()
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Node trajectory analysis. Pass run_spec.json or explicit paths."
@@ -142,9 +153,7 @@ def detect_groups(node_df: pd.DataFrame, group_col: str):
 def compute_nodal_trajectories(node_df, metric_cols, group_col, session_col, n_nodes):
     records = []
     for node in range(1, n_nodes + 1):
-        if node % 10 == 0 or node == n_nodes:
-            print(f"  Computing trajectories: {node}/{n_nodes} ({node/n_nodes*100:.0f}%)", end="
-")
+        _progress(node, n_nodes, "Computing trajectories")
         node_data = node_df[node_df["node"] == node]
         if node_data.empty:
             continue
@@ -190,8 +199,6 @@ def compute_nodal_trajectories(node_df, metric_cols, group_col, session_col, n_n
 def compute_intervention_effects(trajectory_df, intervention_groups, control_group, n_nodes):
     records = []
     for metric in trajectory_df["metric"].unique():
-        print(f"  Computing effects: {metric}", end="
-")
         for node in range(1, n_nodes + 1):
             base    = trajectory_df[(trajectory_df["node"] == node) &
                                      (trajectory_df["metric"] == metric)]
@@ -363,7 +370,7 @@ def main() -> None:
 
     print("=" * 70)
     _start_time = datetime.now()
-    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
+    print("  Started:  " + _start_time.strftime("%Y-%m-%d %H:%M:%S"))
     print("NODE-LEVEL TEMPORAL TRAJECTORY ANALYSIS")
     print("=" * 70)
     print(f"Input:  {node_metrics_dir}")
@@ -428,9 +435,9 @@ def main() -> None:
     print("\n" + "=" * 70)
     print("ANALYSIS COMPLETE")
     print("=" * 70)
-    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
-    print(f"  Finished: {_end_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
-    print(f"  Duration: {str(_duration).split(\'.\')[0]}")
+    print("  Started:  " + _start_time.strftime("%Y-%m-%d %H:%M:%S"))
+    print("  Finished: " + _end_time.strftime("%Y-%m-%d %H:%M:%S"))
+    print("  Duration: " + str(_duration).split(".")[0])
     if not effects_df.empty:
         print(f"Nodes with strong effects (|d|>0.5):   {(effects_df['abs_effect_size'] > 0.5).sum()}")
         print(f"Nodes with moderate effects (|d|>0.2): {(effects_df['abs_effect_size'] > 0.2).sum()}")

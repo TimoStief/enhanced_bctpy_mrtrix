@@ -52,6 +52,17 @@ from group_detection import detect_or_ask_groups
 # CLI / run_spec LOADING
 # ============================================================================
 
+
+def _progress(current, total, desc):
+    """Simple progress display without external dependencies."""
+    pct = current / total * 100 if total > 0 else 0
+    bar_len = 30
+    filled = int(bar_len * current / total) if total > 0 else 0
+    bar = "█" * filled + "░" * (bar_len - filled)
+    print(f"  {desc}: |{bar}| {current}/{total} ({pct:.0f}%)", end="\r", flush=True)
+    if current == total:
+        print()
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Node-level comprehensive analysis. Pass run_spec.json or explicit paths."
@@ -225,9 +236,7 @@ def run_five_group_anova(node_df, metric_cols, group_col, groups, n_nodes):
     all_groups = groups["all"]
 
     for node in range(1, n_nodes + 1):
-        if node % 10 == 0 or node == n_nodes:
-            print(f"  5-Group ANOVA: {node}/{n_nodes} ({node/n_nodes*100:.0f}%)", end="
-")
+        _progress(node, n_nodes, "5-Group ANOVA")
         nd = node_df[node_df["node"] == node]
         for metric in metric_cols:
             data = nd[nd[metric].notna()]
@@ -256,9 +265,6 @@ def run_ttest_analysis(node_df, metric_cols, group_col, group_a, group_b,
     """Generic t-test between two sets of groups."""
     records = []
     for node in range(1, n_nodes + 1):
-        if node % 10 == 0 or node == n_nodes:
-            print(f"  T-test analysis: {node}/{n_nodes} ({node/n_nodes*100:.0f}%)", end="
-")
         nd = node_df[node_df["node"] == node]
         for metric in metric_cols:
             a_data = nd[nd[group_col].isin(group_a) & nd[metric].notna()][metric].values
@@ -288,9 +294,6 @@ def run_ttest_analysis(node_df, metric_cols, group_col, group_a, group_b,
 def run_age_correlations(node_df, metric_cols, age_col, n_nodes):
     records = []
     for node in range(1, n_nodes + 1):
-        if node % 10 == 0 or node == n_nodes:
-            print(f"  Age correlations: {node}/{n_nodes} ({node/n_nodes*100:.0f}%)", end="
-")
         nd = node_df[node_df["node"] == node]
         for metric in metric_cols:
             data = nd[nd[metric].notna() & nd[age_col].notna()]
@@ -454,7 +457,7 @@ def main() -> None:
 
     print("=" * 70)
     _start_time = datetime.now()
-    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
+    print("  Started:  " + _start_time.strftime("%Y-%m-%d %H:%M:%S"))
     print("NODE-LEVEL COMPREHENSIVE ANALYSIS")
     print("=" * 70)
     print(f"Input:  {node_metrics_dir}")
@@ -599,9 +602,9 @@ def main() -> None:
     print("\n" + "=" * 70)
     print("ANALYSIS COMPLETE")
     print("=" * 70)
-    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
-    print(f"  Finished: {_end_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
-    print(f"  Duration: {str(_duration).split(\'.\')[0]}")
+    print("  Started:  " + _start_time.strftime("%Y-%m-%d %H:%M:%S"))
+    print("  Finished: " + _end_time.strftime("%Y-%m-%d %H:%M:%S"))
+    print("  Duration: " + str(_duration).split(".")[0])
     print(f"Output: {output_dir}")
 
 

@@ -18,6 +18,7 @@ VERSION: 3.0 (Auto-detection, run_spec driven)
 """
 
 from __future__ import annotations
+from datetime import datetime
 
 import argparse
 import json
@@ -508,6 +509,8 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
+    _start_time = datetime.now()
+    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
     print("GLOBAL NETWORK METRICS ANALYSIS")
     print("=" * 70)
     print(f"Data directory:   {data_dir}")
@@ -542,7 +545,11 @@ def main() -> None:
     print("Computing global metrics...")
     results = []
 
-    for _, row in metadata.iterrows():
+    _total = len(metadata)
+    for _i, (_, row) in enumerate(metadata.iterrows()):
+        if _i % 5 == 0 or _i == _total - 1:
+            print(f"  Processing subjects: {_i+1}/{_total} ({(_i+1)/_total*100:.0f}%)", end="
+")
         subject = str(row[subject_col])
         session = str(row[session_col])
 
@@ -601,9 +608,14 @@ def main() -> None:
     make_plots(results_df, umap_df, trajectory_df, output_dir / "plots", group_col, "subject")
 
     # ── Done ───────────────────────────────────────────────────────────────
+    _end_time = datetime.now()
+    _duration = _end_time - _start_time
     print("\n" + "=" * 70)
     print("ANALYSIS COMPLETE")
     print("=" * 70)
+    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
+    print(f"  Finished: {_end_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
+    print(f"  Duration: {str(_duration).split(\'.\')[0]}")
     print(f"Output: {output_dir}")
 
 

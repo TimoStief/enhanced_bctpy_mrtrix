@@ -17,6 +17,7 @@ VERSION: 1.0 (Auto-detection, run_spec driven)
 """
 
 from __future__ import annotations
+from datetime import datetime
 
 import argparse
 import json
@@ -161,7 +162,12 @@ def calculate_slopes(df: pd.DataFrame, cols: dict) -> pd.DataFrame:
     metric_cols = [c for c in cols["metric_cols"] if c in df.columns]
 
     records = []
-    for subj, sdata in df.groupby(subj_col):
+    _subjects = df[subj_col].unique()
+    _total = len(_subjects)
+    for _i, (subj, sdata) in enumerate(df.groupby(subj_col)):
+        if _i % 5 == 0 or _i == _total - 1:
+            print(f"  Calculating slopes: {_i+1}/{_total} ({(_i+1)/_total*100:.0f}%)", end="
+")
         sdata = sdata.sort_values(session_col)
         if len(sdata) < 2:
             continue
@@ -271,6 +277,8 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
+    _start_time = datetime.now()
+    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
     print("STRATIFIED SVM ANALYSIS")
     print("=" * 70)
 
@@ -350,9 +358,14 @@ def main() -> None:
     with open(output_dir / "stratified_svm_summary.json", "w") as f:
         json.dump(summary, f, indent=2)
 
+    _end_time = datetime.now()
+    _duration = _end_time - _start_time
     print("\n" + "=" * 70)
     print("ANALYSIS COMPLETE")
     print("=" * 70)
+    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
+    print(f"  Finished: {_end_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
+    print(f"  Duration: {str(_duration).split(\'.\')[0]}")
     print(f"Output: {output_dir}")
 
 

@@ -23,6 +23,7 @@ VERSION: 2.0 (CLI-driven, auto-detection)
 """
 
 from __future__ import annotations
+from datetime import datetime
 
 import argparse
 import json
@@ -264,7 +265,12 @@ def calculate_slopes(df: pd.DataFrame, cols: dict) -> pd.DataFrame:
     metric_cols = [c for c in cols["metric_cols"] if c in df.columns]
 
     records = []
-    for subject, subj_data in df.groupby(subject_col):
+    _subjects = df[subject_col].unique()
+    _total = len(_subjects)
+    for _i, (subject, subj_data) in enumerate(df.groupby(subject_col)):
+        if _i % 5 == 0 or _i == _total - 1:
+            print(f"  Calculating slopes: {_i+1}/{_total} ({(_i+1)/_total*100:.0f}%)", end="
+")
         subj_data = subj_data.sort_values(session_col)
         if len(subj_data) < 2:
             continue
@@ -536,6 +542,8 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
+    _start_time = datetime.now()
+    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
     print("SVM ANALYSIS")
     print("=" * 70)
     print(f"Metrics file: {metrics_file}")

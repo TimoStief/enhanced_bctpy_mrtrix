@@ -24,6 +24,7 @@ VERSION: 1.0 (Auto-detection, run_spec driven)
 """
 
 from __future__ import annotations
+from datetime import datetime
 
 import argparse
 import json
@@ -224,6 +225,9 @@ def run_five_group_anova(node_df, metric_cols, group_col, groups, n_nodes):
     all_groups = groups["all"]
 
     for node in range(1, n_nodes + 1):
+        if node % 10 == 0 or node == n_nodes:
+            print(f"  5-Group ANOVA: {node}/{n_nodes} ({node/n_nodes*100:.0f}%)", end="
+")
         nd = node_df[node_df["node"] == node]
         for metric in metric_cols:
             data = nd[nd[metric].notna()]
@@ -252,6 +256,9 @@ def run_ttest_analysis(node_df, metric_cols, group_col, group_a, group_b,
     """Generic t-test between two sets of groups."""
     records = []
     for node in range(1, n_nodes + 1):
+        if node % 10 == 0 or node == n_nodes:
+            print(f"  T-test analysis: {node}/{n_nodes} ({node/n_nodes*100:.0f}%)", end="
+")
         nd = node_df[node_df["node"] == node]
         for metric in metric_cols:
             a_data = nd[nd[group_col].isin(group_a) & nd[metric].notna()][metric].values
@@ -281,6 +288,9 @@ def run_ttest_analysis(node_df, metric_cols, group_col, group_a, group_b,
 def run_age_correlations(node_df, metric_cols, age_col, n_nodes):
     records = []
     for node in range(1, n_nodes + 1):
+        if node % 10 == 0 or node == n_nodes:
+            print(f"  Age correlations: {node}/{n_nodes} ({node/n_nodes*100:.0f}%)", end="
+")
         nd = node_df[node_df["node"] == node]
         for metric in metric_cols:
             data = nd[nd[metric].notna() & nd[age_col].notna()]
@@ -443,6 +453,8 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
+    _start_time = datetime.now()
+    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
     print("NODE-LEVEL COMPREHENSIVE ANALYSIS")
     print("=" * 70)
     print(f"Input:  {node_metrics_dir}")
@@ -582,9 +594,14 @@ def main() -> None:
 
     # ── Summary ───────────────────────────────────────────────────────────
     print_summary(results)
+    _end_time = datetime.now()
+    _duration = _end_time - _start_time
     print("\n" + "=" * 70)
     print("ANALYSIS COMPLETE")
     print("=" * 70)
+    print(f"  Started:  {_start_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
+    print(f"  Finished: {_end_time.strftime(\'%Y-%m-%d %H:%M:%S\')}")
+    print(f"  Duration: {str(_duration).split(\'.\')[0]}")
     print(f"Output: {output_dir}")
 
 

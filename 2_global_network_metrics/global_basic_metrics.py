@@ -762,6 +762,60 @@ def main() -> None:
                 if metric in d:
                     print(f"    {metric}: {d[metric].mean():.3f} ± {d[metric].std():.3f}")
 
+    # ── Comprehensive Summary Tables ──────────────────────────────────────
+    print("\nGenerating summary tables...")
+    metric_cols = [c for c in results_df.columns
+                   if c not in {"subject", "session", group_col, sex_col, "atlas"}
+                   and pd.api.types.is_numeric_dtype(results_df[c])]
+
+    # Summary per session
+    summary_session = results_df.groupby("session")[metric_cols].agg(["mean", "std", "min", "max"])
+    summary_session.columns = ["_".join(c) for c in summary_session.columns]
+    summary_session.to_csv(output_dir / "global_metrics_summary_by_session.csv")
+    print("✓ Saved: global_metrics_summary_by_session.csv")
+
+    # Summary per group (if available)
+    if group_col and group_col in results_df.columns:
+        summary_group = results_df.groupby(group_col)[metric_cols].agg(["mean", "std", "min", "max"])
+        summary_group.columns = ["_".join(c) for c in summary_group.columns]
+        summary_group.to_csv(output_dir / "global_metrics_summary_by_group.csv")
+        print("✓ Saved: global_metrics_summary_by_group.csv")
+
+        # Summary per group x session
+        summary_group_session = results_df.groupby([group_col, "session"])[metric_cols].agg(["mean", "std"])
+        summary_group_session.columns = ["_".join(c) for c in summary_group_session.columns]
+        summary_group_session.to_csv(output_dir / "global_metrics_summary_by_group_session.csv")
+        print("✓ Saved: global_metrics_summary_by_group_session.csv")
+
+    # Long-format summary (easy to read)
+    long_rows = []
+    group_by = [group_col, "session"] if group_col and group_col in results_df.columns else ["session"]
+    for keys, grp_df in results_df.groupby(group_by):
+        key_dict = dict(zip(group_by, keys if isinstance(keys, tuple) else [keys]))
+        for metric in metric_cols:
+            long_rows.append({
+                **key_dict,
+                "metric":  metric,
+                "mean":    round(grp_df[metric].mean(), 6),
+                "std":     round(grp_df[metric].std(), 6),
+                "min":     round(grp_df[metric].min(), 6),
+                "max":     round(grp_df[metric].max(), 6),
+                "n":       len(grp_df),
+            })
+    summary_long = pd.DataFrame(long_rows)
+    summary_long.to_csv(output_dir / "global_metrics_summary_long.csv", index=False)
+    print("✓ Saved: global_metrics_summary_long.csv")
+
+    # Print small_worldness overview to console
+    if "small_worldness" in results_df.columns:
+        print("\nSmall-Worldness by session:")
+        sw = results_df.groupby("session")["small_worldness"].agg(["mean", "std", "min", "max"])
+        print(sw.round(4).to_string())
+        if group_col and group_col in results_df.columns:
+            print("\nSmall-Worldness by group x session:")
+            sw2 = results_df.groupby([group_col, "session"])["small_worldness"].agg(["mean", "std"])
+            print(sw2.round(4).to_string())
+
     # ── UMAP ───────────────────────────────────────────────────────────────
     print("\nRunning UMAP...")
     meta_cols = {"subject", "session", group_col, sex_col} - {None}

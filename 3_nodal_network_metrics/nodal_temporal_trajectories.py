@@ -62,6 +62,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--node-metrics-dir", help="Directory with node_level_metrics.parquet")
     parser.add_argument("--output-dir",       help="Output directory")
     parser.add_argument("--control-group",    help="Control group label (auto-detected if omitted)")
+    parser.add_argument("--single-group",  action="store_true", default=False,
+                        help="Single-group mode: analyze temporal changes within one group (no control needed)")
     return parser.parse_args()
 
 
@@ -93,6 +95,9 @@ def load_config(args: argparse.Namespace) -> dict:
 
     config["node_metrics_dir"] = Path(config["node_metrics_dir"]).expanduser().resolve()
     config["output_dir"]       = Path(config["output_dir"]).expanduser().resolve()
+    if hasattr(args, 'single_group') and args.single_group:
+        config["single_group"] = True
+    config.setdefault("single_group", False)
     return config
 
 
@@ -394,9 +399,18 @@ def main() -> None:
     metric_cols = detect_metric_cols(node_df)
     n_nodes = detect_n_nodes(node_df)
     run_spec_path = Path(args.run_spec) if args.run_spec else None
-    groups = detect_or_ask_groups(node_df, group_col, config, run_spec_path)
-    intervention_groups = groups["intervention"]
-    control_group = groups["control"]
+    # ── Single-group or multi-group mode ──────────────────────────────────
+    all_groups = node_df[group_col].dropna().unique().tolist() if group_col else []
+    single_group_mode = config.get("single_group", False) or len(all_groups) <= 1
+
+    if single_group_mode:
+        print(f"  + Single-group mode: analyzing temporal changes within group(s): {all_groups}")
+        intervention_groups = all_groups
+        control_group       = all_groups[0] if all_groups else None
+    else:
+        groups = detect_or_ask_groups(node_df, group_col, config, run_spec_path)
+        intervention_groups = groups["intervention"]
+        control_group       = groups["control"]
     print()
 
     # Trajectories
@@ -408,20 +422,63 @@ def main() -> None:
     trajectory_df.to_parquet(output_dir / "node_trajectories.parquet", index=False)
     print("  + Saved: node_trajectories.parquet")
 
-    # Intervention effects
-    print("\nComputing intervention effects...")
-    effects_df = compute_intervention_effects(
-        trajectory_df, intervention_groups, control_group, n_nodes
-    )
-    print(f"  + {len(effects_df)} node x metric effects computed")
-    effects_df.to_parquet(output_dir / "intervention_effect_sizes.parquet", index=False)
-    print("  + Saved: intervention_effect_sizes.parquet")
+    # Intervention effects / Single-group temporal effects
+    if single_group_mode:
+        print("\nComputing temporal effect sizes (single-group)...")
+        # In single-group mode: effect size = slope significance across subjects
+        from scipy import stats as _stats
+        records = []
+        for metric in trajectory_df["metric"].unique():
+            for node in range(1, n_nodes + 1):
+                node_data = trajectory_df[
+                    (trajectory_df["node"] == node) &
+                    (trajectory_df["metric"] == metric)
+                ]["slope"].dropna().values
+                if len(node_data) >= 3:
+                    t_stat, p_val = _stats.ttest_1samp(node_data, 0)
+                    cohens_d = node_data.mean() / (node_data.std() + 1e-10)
+                    records.append({
+                        "node": node, "metric": metric,
+                        "mean_slope": float(node_data.mean()),
+                        "std_slope":  float(node_data.std()),
+                        "t_statistic": float(t_stat),
+                        "p_value":    float(p_val),
+                        "effect_size_cohens_d": float(cohens_d),
+                        "abs_effect_size": float(abs(cohens_d)),
+                        "significant": bool(p_val < 0.05),
+                        "n_subjects": len(node_data),
+                    })
+        effects_df = pd.DataFrame(records)
+        print(f"  + {len(effects_df)} node x metric temporal effects computed")
+        effects_df.to_parquet(output_dir / "temporal_effect_sizes.parquet", index=False)
+        effects_df.to_csv(output_dir / "temporal_effect_sizes.csv", index=False)
+        print("  + Saved: temporal_effect_sizes.parquet + .csv")
+
+        # Top nodes
+        if not effects_df.empty:
+            top = effects_df.nlargest(20, "abs_effect_size")[
+                ["node", "metric", "mean_slope", "effect_size_cohens_d", "p_value", "significant"]
+            ]
+            print("\nTop 20 nodes with strongest temporal changes:")
+            print(top.to_string(index=False))
+            top.to_csv(output_dir / "top_temporal_nodes.csv", index=False)
+            print("  + Saved: top_temporal_nodes.csv")
+
+        hub_df = pd.DataFrame()
+    else:
+        print("\nComputing intervention effects...")
+        effects_df = compute_intervention_effects(
+            trajectory_df, intervention_groups, control_group, n_nodes
+        )
+        print(f"  + {len(effects_df)} node x metric effects computed")
+        effects_df.to_parquet(output_dir / "intervention_effect_sizes.parquet", index=False)
+        print("  + Saved: intervention_effect_sizes.parquet")
 
     # Hub analysis
     print("\nAnalyzing hub-specific responses...")
     hub_df = compute_hub_responses(
         node_df, trajectory_df, intervention_groups, control_group, group_col, n_nodes
-    )
+    ) if not single_group_mode else pd.DataFrame()
     if not hub_df.empty:
         test_hub_type_effects(hub_df)
         hub_df.to_parquet(output_dir / "hub_specific_responses.parquet", index=False)

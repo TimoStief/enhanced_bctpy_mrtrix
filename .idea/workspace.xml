@@ -4,17 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f7e9a91e-fb97-4b20-8b1d-bb3cedc819f7" name="Changes" comment="integrating more details into progressbar">
+    <list default="true" id="f7e9a91e-fb97-4b20-8b1d-bb3cedc819f7" name="Changes" comment="fixed progressbar details">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/2_global_network_metrics/global_basic_metrics.py" beforeDir="false" afterPath="$PROJECT_DIR$/2_global_network_metrics/global_basic_metrics.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_hub_identification.py" beforeDir="false" afterPath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_hub_identification.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_multivariate_analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_multivariate_analysis.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_temporal_trajectories.py" beforeDir="false" afterPath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_temporal_trajectories.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/4_statistical_classification/stat_random_forest_comparison.py" beforeDir="false" afterPath="$PROJECT_DIR$/4_statistical_classification/stat_random_forest_comparison.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/4_statistical_classification/stat_svm_baseline_analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/4_statistical_classification/stat_svm_baseline_analysis.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/4_statistical_classification/stat_svm_stratified_5groups.py" beforeDir="false" afterPath="$PROJECT_DIR$/4_statistical_classification/stat_svm_stratified_5groups.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/4_statistical_classification/stat_svm_time_5groups.py" beforeDir="false" afterPath="$PROJECT_DIR$/4_statistical_classification/stat_svm_time_5groups.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/4_statistical_classification/stat_svm_time_effects.py" beforeDir="false" afterPath="$PROJECT_DIR$/4_statistical_classification/stat_svm_time_effects.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -387,7 +379,15 @@
       <option name="project" value="LOCAL" />
       <updated>1780562997305</updated>
     </task>
-    <option name="localTasksCounter" value="32" />
+    <task id="LOCAL-00032" summary="fixed progressbar details">
+      <option name="closed" value="true" />
+      <created>1780567587507</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1780567587507</updated>
+    </task>
+    <option name="localTasksCounter" value="33" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -405,7 +405,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="atlas" />
     <MESSAGE value="configuration for win and paths" />
     <MESSAGE value="n_nodes adjusted" />
     <MESSAGE value="data location adjustments" />
@@ -430,7 +429,8 @@
     <MESSAGE value="progress bar and timers for skripts" />
     <MESSAGE value="codecov 80%+ fixes" />
     <MESSAGE value="integrating more details into progressbar" />
-    <option name="LAST_COMMIT_MESSAGE" value="integrating more details into progressbar" />
+    <MESSAGE value="fixed progressbar details" />
+    <option name="LAST_COMMIT_MESSAGE" value="fixed progressbar details" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/enhanced_bctpy_mrtrix$preflight_check.coverage" NAME="preflight_check Coverage Results" MODIFIED="1770718692255" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/0_installation" />

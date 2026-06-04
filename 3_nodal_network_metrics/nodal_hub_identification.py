@@ -63,6 +63,151 @@ def _progress(current, total, desc):
     if current == total:
         print()
 
+# ============================================================================
+# MATRIX TYPE DETECTION & NORMALIZATION
+# ============================================================================
+
+def detect_matrix_type(A: np.ndarray) -> dict:
+    """Auto-detect matrix type from values."""
+    max_val  = A.max()
+    min_val  = A[A > 0].min() if (A > 0).any() else 0
+    n_unique = len(np.unique(A))
+    is_binary = n_unique <= 2
+
+    if is_binary:
+        mat_type = "binary"
+        confidence = "high"
+        recommendation = "binary"
+    elif max_val > 1000:
+        mat_type = "fiber_counts"
+        confidence = "high"
+        recommendation = "log"
+    elif max_val > 1:
+        mat_type = "weighted_unnormalized"
+        confidence = "medium"
+        recommendation = "max"
+    else:
+        mat_type = "weighted_normalized"
+        confidence = "high"
+        recommendation = "none"
+
+    return {
+        "type": mat_type,
+        "max": float(max_val),
+        "min_nonzero": float(min_val),
+        "recommendation": recommendation,
+        "confidence": confidence,
+    }
+
+
+def print_matrix_type_help():
+    """Print help for matrix types."""
+    print("  ── Matrix type guide ──────────────────────────────────────────")
+    print("  [1] fiber_counts   Raw tractography streamline counts (max >> 1)")
+    print("                     e.g. MRtrix, DSI Studio count matrices")
+    print("                     → log-normalization recommended")
+    print("  [2] weighted       FA-weighted or NOS-normalized (max ~0-1)")
+    print("                     → no normalization needed")
+    print("  [3] binary         Binary connectivity (0 or 1 only)")
+    print("                     → binarize recommended")
+    print("  [4] log            Already log-normalized")
+    print("                     → no normalization needed")
+    print("  ───────────────────────────────────────────────────────────────")
+
+
+def ask_normalize(data_dir: Path, fmt: str, n_nodes: int,
+                  normalize_arg: str | None) -> str:
+    """
+    Detect matrix type and ask user for normalization preference.
+    Returns: 'log', 'max', 'binary', or 'none'
+    """
+    # Find first matrix file
+    patterns = [f"*.{fmt}", f"**/*.{fmt}"]
+    first_file = None
+    for pat in patterns:
+        files = list(data_dir.glob(pat))
+        if files:
+            first_file = files[0]
+            break
+
+    if first_file is None:
+        print("  ⚠ Could not find matrix for type detection")
+        return normalize_arg or "none"
+
+    try:
+        if fmt == "npy":
+            A = np.load(first_file)
+        else:
+            import scipy.io as sio
+            mat = sio.loadmat(str(first_file))
+            A = list(mat.values())[-1]
+        A = np.array(A, dtype=float)
+        np.fill_diagonal(A, 0)
+    except Exception as e:
+        print(f"  ⚠ Could not load matrix for detection: {e}")
+        return normalize_arg or "none"
+
+    info = detect_matrix_type(A)
+
+    print("\n" + "=" * 70)
+    print("MATRIX TYPE DETECTION")
+    print("=" * 70)
+    print(f"  File:          {first_file.name}")
+    print(f"  Shape:         {A.shape[0]} × {A.shape[1]}")
+    print(f"  Max value:     {info['max']:.1f}")
+    print(f"  Min (nonzero): {info['min_nonzero']:.4f}")
+    print(f"  Sparsity:      {(A == 0).sum() / A.size * 100:.1f}% zeros")
+    print(f"  Symmetric:     {'yes' if np.allclose(A, A.T) else 'no'}")
+    print()
+    print(f"  Detected type: {info['type'].upper()} (confidence: {info['confidence']})")
+    print(f"  Recommendation: {info['recommendation'].upper()} normalization")
+    print()
+
+    # If normalize_arg already given via CLI → use it
+    if normalize_arg and normalize_arg != "auto":
+        print(f"  Using CLI argument: --normalize {normalize_arg}")
+        print("=" * 70)
+        return normalize_arg
+
+    # Ask user
+    print_matrix_type_help()
+    rec_map = {
+        "fiber_counts": "1", "weighted_normalized": "2",
+        "binary": "3", "log": "4", "weighted_unnormalized": "2"
+    }
+    rec_num = rec_map.get(info["type"], "1")
+    rec_label = info["recommendation"]
+
+    print(f"\n  Enter choice [1-4] or press Enter to use recommendation [{rec_num} = {rec_label}]: ", end="", flush=True)
+    choice = input().strip()
+
+    if not choice:
+        choice = rec_num
+
+    mapping = {"1": "log", "2": "none", "3": "binary", "4": "none"}
+    result = mapping.get(choice, rec_label)
+    print(f"  ✓ Using normalization: {result.upper()}")
+    print("=" * 70)
+    return result
+
+
+def normalize_matrix(A: np.ndarray, normalize: str) -> np.ndarray:
+    """Normalize connectivity matrix."""
+    if normalize == "log":
+        A_norm = np.log1p(A)
+        max_val = A_norm.max()
+        if max_val > 0:
+            A_norm = A_norm / max_val
+        return A_norm
+    elif normalize == "max":
+        max_val = A.max()
+        return A / max_val if max_val > 0 else A
+    elif normalize == "binary":
+        return (A > 0).astype(float)
+    else:
+        return A.copy()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Node-level network metrics analysis. Pass run_spec.json or explicit paths."
@@ -111,6 +256,8 @@ def load_config(args: argparse.Namespace) -> dict:
     config["metadata_file"] = Path(config["metadata_file"]).expanduser().resolve()
     config["output_dir"]    = Path(config["output_dir"]).expanduser().resolve()
     config.setdefault("binarize", False)
+    if args.normalize: config["normalize"] = args.normalize
+    config.setdefault("normalize", None)
     return config
 
 
@@ -510,6 +657,9 @@ def main() -> None:
     print(f"\n  Summary: atlas={atlas}, n_nodes={n_nodes}, format={fmt}, sessions={sessions}")
     print()
 
+    # ── Matrix normalization ───────────────────────────────────────────────
+    normalize = ask_normalize(data_dir, fmt, n_nodes, config.get("normalize"))
+
     # ── Compute metrics ────────────────────────────────────────────────────
     print("Computing node-level metrics...")
     all_node_records = []
@@ -521,13 +671,14 @@ def main() -> None:
         subject = str(row[subject_col])
         session = str(row[session_col])
 
-        print(f"  → {subject} ses-{session} loading matrix...                              ", end="\r", flush=True)
+        print(f"  → {subject} ses-{session} loading matrix...                              ", end="\n", flush=True)
         A = load_connectivity_matrix(data_dir, subject, session, fmt, n_nodes)
         if A is None:
             continue
-        print(f"  → {subject} ses-{session} computing degree, betweenness, hub classification...  ", end="\r", flush=True)
+        A = normalize_matrix(A, normalize)
+        print(f"  → {subject} ses-{session} computing degree, betweenness, hub classification...  ", end="\n", flush=True)
         metrics        = compute_node_metrics(A, n_nodes, binarize=binarize)
-        print(f"  ✓ {subject} ses-{session} done                                                   ", end="\r", flush=True)
+        print(f"  ✓ {subject} ses-{session} done                                                   ", end="\n", flush=True)
         rc             = compute_rich_club(A)
         rc_mean        = float(np.nanmean(rc)) if rc is not None and len(rc) > 0 else np.nan
 

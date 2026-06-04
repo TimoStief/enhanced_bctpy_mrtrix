@@ -153,7 +153,7 @@ def detect_groups(node_df: pd.DataFrame, group_col: str):
 def compute_nodal_trajectories(node_df, metric_cols, group_col, session_col, n_nodes):
     records = []
     for node in range(1, n_nodes + 1):
-        _progress(node, n_nodes, "Computing trajectories")
+        _progress(node, n_nodes, f"Trajectories node {node}/{n_nodes}")
         node_data = node_df[node_df["node"] == node]
         if node_data.empty:
             continue

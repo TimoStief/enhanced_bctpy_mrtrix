@@ -511,7 +511,7 @@ def main() -> None:
 
     _total_s = len(metadata)
     for _i_s, (_, row) in enumerate(metadata.iterrows()):
-        _progress(_i_s + 1, _total_s, "Computing node metrics")
+        _progress(_i_s + 1, _total_s, f"Computing {row[subject_col]} ses-{row[session_col]}")
         subject = str(row[subject_col])
         session = str(row[session_col])
 

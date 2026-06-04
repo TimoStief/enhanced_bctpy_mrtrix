@@ -558,7 +558,7 @@ def main() -> None:
 
     _total_s = len(metadata)
     for _i_s, (_, row) in enumerate(metadata.iterrows()):
-        _progress(_i_s + 1, _total_s, "Processing subjects")
+        _progress(_i_s + 1, _total_s, f"Processing {row[subject_col]} ses-{row[session_col]}")
         subject = str(row[subject_col])
         session = str(row[session_col])
 

@@ -236,7 +236,7 @@ def run_five_group_anova(node_df, metric_cols, group_col, groups, n_nodes):
     all_groups = groups["all"]
 
     for node in range(1, n_nodes + 1):
-        _progress(node, n_nodes, "5-Group ANOVA")
+        _progress(node, n_nodes, f"ANOVA node {node}/{n_nodes}")
         nd = node_df[node_df["node"] == node]
         for metric in metric_cols:
             data = nd[nd[metric].notna()]

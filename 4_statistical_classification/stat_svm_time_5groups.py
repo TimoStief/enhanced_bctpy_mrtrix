@@ -169,7 +169,7 @@ def calculate_slopes(df: pd.DataFrame, cols: dict) -> pd.DataFrame:
     _subjects_list = list(df.groupby(subj_col))
     _total_s = len(_subjects_list)
     for _i_s, (subj, sdata) in enumerate(_subjects_list):
-        _progress(_i_s + 1, _total_s, "Calculating slopes")
+        _progress(_i_s + 1, _total_s, f"Slopes: {subj} ({sdata[group_col].iloc[0] if group_col and group_col in sdata.columns else ''})")
         sdata = sdata.sort_values(session_col)
         if len(sdata) < 2:
             continue

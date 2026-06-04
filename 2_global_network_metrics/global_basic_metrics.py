@@ -334,28 +334,36 @@ def compute_global_metrics(A: np.ndarray, binarize: bool = False) -> dict:
             return nan_result
 
         A_bin = (A_proc > 0).astype(float)
+        print(f"    computing density...                    ", end="\n", flush=True)
         density = bct.density_und(A_bin)[0] if isinstance(bct.density_und(A_bin), tuple) else bct.density_und(A_bin)
 
+        print(f"    computing path length + efficiency...   ", end="\n", flush=True)
         L = bct.distance_wei(1.0 / (A_proc + 1e-10))[0]
         path_length = np.mean(L[L > 0])
         global_efficiency = 1.0 / path_length if path_length > 0 else np.nan
 
+        print(f"    computing clustering + transitivity...  ", end="\n", flush=True)
         C = bct.clustering_coef_wu(A_proc)
         clustering_coef = np.mean(C)
         transitivity = bct.transitivity_wu(A_proc)
 
+        print(f"    computing community detection...        ", end="\n", flush=True)
         Ci, Q = bct.community_louvain(A_bin)
         n_communities = len(np.unique(Ci[~np.isnan(Ci)]))
 
+        print(f"    computing participation coefficient...  ", end="\n", flush=True)
         participation = bct.participation_coef(A_proc, Ci)
         participation_mean = np.nanmean(participation)
 
+        print(f"    computing local efficiency (slow)...    ", end="\n", flush=True)
         local_eff = bct.efficiency_wei(A_proc, local=True)
         local_eff_mean = np.nanmean(local_eff)
 
+        print(f"    computing betweenness centrality (slow)...", end="\n", flush=True)
         betweenness = bct.betweenness_wei(A_proc)
         betweenness_mean = np.nanmean(betweenness)
 
+        print(f"    computing small-worldness...            ", end="\n", flush=True)
         small_worldness = clustering_coef / path_length if path_length > 0 else np.nan
 
         return {
@@ -562,11 +570,13 @@ def main() -> None:
         subject = str(row[subject_col])
         session = str(row[session_col])
 
+        print(f"  → {subject} ses-{session} loading matrix...                              ", end="\r", flush=True)
         A = load_connectivity_matrix(data_dir, subject, session, fmt, n_nodes)
         if A is None:
             continue
-
+        print(f"  → {subject} ses-{session} computing density, clustering, betweenness...  ", end="\r", flush=True)
         metrics = compute_global_metrics(A, binarize=binarize)
+        print(f"  ✓ {subject} ses-{session} done                                             ", end="\r", flush=True)
 
         record = {"subject": subject, "session": session, **metrics}
         if group_col and group_col in row:

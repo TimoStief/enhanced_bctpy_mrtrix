@@ -153,7 +153,8 @@ def detect_groups(node_df: pd.DataFrame, group_col: str):
 def compute_nodal_trajectories(node_df, metric_cols, group_col, session_col, n_nodes):
     records = []
     for node in range(1, n_nodes + 1):
-        _progress(node, n_nodes, f"Trajectories node {node}/{n_nodes}")
+        _progress(node, n_nodes, "Computing trajectories")
+        print(f"    node {node}/{n_nodes}: fitting trajectories per metric/group...  ", end="\n", flush=True)
         node_data = node_df[node_df["node"] == node]
         if node_data.empty:
             continue
@@ -161,6 +162,7 @@ def compute_nodal_trajectories(node_df, metric_cols, group_col, session_col, n_n
             if metric not in node_data.columns:
                 continue
             for group, group_data in node_data.groupby(group_col):
+                print(f"      → node {node} | {metric} | {group}...  ", end="\r", flush=True)
                 sessions = group_data[session_col].values
                 values   = group_data[metric].values
                 valid    = ~np.isnan(values)

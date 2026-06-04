@@ -309,25 +309,31 @@ def compute_node_metrics(A: np.ndarray, n_nodes: int, binarize: bool = False) ->
     metrics["strength"] = bct.strengths_und(A)
 
     try:
+        print(f"    computing clustering coefficient...    ", end="\n", flush=True)
         metrics["clustering"] = bct.clustering_coef_wu(A)
     except Exception:
         metrics["clustering"] = nan_vec()
 
     try:
+        print(f"    computing local efficiency (slow)...   ", end="\n", flush=True)
         metrics["local_efficiency"] = bct.efficiency_wei(A, local=True)
     except Exception:
         metrics["local_efficiency"] = nan_vec()
 
     try:
+        print(f"    computing betweenness centrality (slow)...", end="\n", flush=True)
         metrics["betweenness"] = bct.betweenness_wei(A)
     except Exception:
         metrics["betweenness"] = nan_vec()
 
     try:
+        print(f"    computing community detection...       ", end="\n", flush=True)
         Ci, Q = bct.community_louvain(A)
         metrics["community"]           = Ci.astype(float)
         metrics["modularity"]          = float(Q)
+        print(f"    computing participation coefficient..  ", end="\n", flush=True)
         metrics["participation_coef"]  = bct.participation_coef(A, Ci)
+        print(f"    computing within-module z-score...     ", end="\n", flush=True)
         metrics["within_module_zscore"] = bct.module_degree_zscore(A, Ci)
         metrics["hub_type"]            = classify_hubs(
             metrics["participation_coef"],
@@ -515,11 +521,13 @@ def main() -> None:
         subject = str(row[subject_col])
         session = str(row[session_col])
 
+        print(f"  → {subject} ses-{session} loading matrix...                              ", end="\r", flush=True)
         A = load_connectivity_matrix(data_dir, subject, session, fmt, n_nodes)
         if A is None:
             continue
-
+        print(f"  → {subject} ses-{session} computing degree, betweenness, hub classification...  ", end="\r", flush=True)
         metrics        = compute_node_metrics(A, n_nodes, binarize=binarize)
+        print(f"  ✓ {subject} ses-{session} done                                                   ", end="\r", flush=True)
         rc             = compute_rich_club(A)
         rc_mean        = float(np.nanmean(rc)) if rc is not None and len(rc) > 0 else np.nan
 

@@ -215,6 +215,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-dir", help="Directory with connectivity matrices")
     parser.add_argument("--metadata", help="Participant metadata file (CSV or TSV)")
     parser.add_argument("--output-dir", help="Output directory")
+    parser.add_argument("--normalize", default=None,
+                        choices=["log", "max", "binary", "none", "auto"],
+                        help="Matrix normalization: log, max, binary, none, auto (default: auto-detect and ask)")
     parser.add_argument("--binarize", action="store_true", default=None,
                         help="Binarize connectivity matrices before analysis")
     return parser.parse_args()

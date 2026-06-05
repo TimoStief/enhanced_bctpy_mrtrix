@@ -374,31 +374,31 @@ def _load_matrix_raw(filepath: Path, fmt: str) -> np.ndarray | None:
 
 
 def find_matrix_file(data_dir: Path, subject: str, session: str, fmt: str) -> Path | None:
+    """
+    Search data_dir recursively for a file matching subject and session.
+    Uses string matching instead of glob patterns for reliability on Windows.
+    """
     subj_clean    = subject.replace("sub-", "")
     subj_prefixed = f"sub-{subj_clean}"
     ses_clean     = str(session).replace("ses-", "")
+    ses_label     = f"ses-{ses_clean}"
 
-    patterns = [
-        f"*{subj_clean}*ses*{ses_clean}*.{fmt}",
-        f"*{subj_prefixed}*ses*{ses_clean}*.{fmt}",
-        f"ses-{ses_clean}/*{subj_clean}*.{fmt}",
-        f"ses-{ses_clean}/*{subj_prefixed}*.{fmt}",
-        f"*{subj_clean}*{ses_clean}*.{fmt}",
-        f"**/*{subj_clean}*{ses_clean}*.{fmt}",
-    ]
-    for pattern in patterns:
-        matches = list(data_dir.glob(pattern))
-        if matches:
-            return matches[0]
+    # Search all files recursively and filter by subject + session
+    all_files = list(data_dir.rglob(f"*.{fmt}"))
+    for f in all_files:
+        name = f.name
+        has_subject = (subj_clean in name) or (subj_prefixed in name)
+        has_session = (ses_label in name) or (f"_{ses_clean}_" in name)
+        if has_subject and has_session:
+            return f
 
+    # Fallback: mat connectivity files
     if fmt == "mat":
-        for pattern in [
-            f"*{subj_clean}*ses*{ses_clean}*.connectivity.mat",
-            f"**/*{subj_clean}*{ses_clean}*.connectivity.mat",
-        ]:
-            matches = list(data_dir.glob(pattern))
-            if matches:
-                return matches[0]
+        for f in data_dir.rglob("*.connectivity.mat"):
+            name = f.name
+            if (subj_clean in name or subj_prefixed in name) and ses_label in name:
+                return f
+
     return None
 
 

@@ -1,0 +1,41 @@
+{
+  "social": {
+    "best_model": "RF",
+    "random_forest": {
+      "cv_mean": 0.6108140225787285,
+      "cv_std": 0.05887452251177693,
+      "train_acc": 1.0
+    },
+    "svm": {
+      "cv_mean": 0.5404040404040403,
+      "cv_std": 0.031133404055398887,
+      "train_acc": 0.76
+    }
+  },
+  "duration": {
+    "best_model": "SVM",
+    "random_forest": {
+      "cv_mean": 0.7406417112299465,
+      "cv_std": 0.04703203292213152,
+      "train_acc": 1.0
+    },
+    "svm": {
+      "cv_mean": 0.7807486631016043,
+      "cv_std": 0.0724652462907267,
+      "train_acc": 0.86
+    }
+  },
+  "intervention": {
+    "best_model": "RF",
+    "random_forest": {
+      "cv_mean": 0.96,
+      "cv_std": 0.020000000000000018,
+      "train_acc": 1.0
+    },
+    "svm": {
+      "cv_mean": 0.95,
+      "cv_std": 0.010000000000000009,
+      "train_acc": 0.98
+    }
+  }
+}

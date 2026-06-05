@@ -1,0 +1,10 @@
+feature,importance
+local_efficiency_slope,0.33974646795564145
+clustering_slope,0.27665432028337267
+strength_slope,0.2647122617490755
+betweenness_slope,0.10181120473601023
+participation_coef_slope,0.01429559315536824
+sex_encoded,0.002780152120531993
+degree_slope,0.0
+within_module_zscore_slope,0.0
+n_sessions,0.0

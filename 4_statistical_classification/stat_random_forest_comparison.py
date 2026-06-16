@@ -124,7 +124,7 @@ def detect_columns(df: pd.DataFrame) -> dict:
                 if c in cl: return co
         return None
 
-    exclude = {"subject", "participant_id", "session", "ses", "session_id",
+    exclude = {"subject", "participant_id", "session", "ses", "session_id", "label",
                "node", "group", "condition", "sex", "gender", "age", "atlas",
                "hub_type", "community", "nr_sessions", "n_sessions",
                "dsi_metric", "matrix_type", "qc_passed", "qc_warnings"}
@@ -223,9 +223,7 @@ def calculate_slopes(df: pd.DataFrame, cols: dict) -> pd.DataFrame:
     _subjects_list = list(df.groupby(subj_col))
     _total_s = len(_subjects_list)
     for _i_s, (subj, sdata) in enumerate(_subjects_list):
-        _g = sdata[group_col].iloc[0] if group_col and group_col in sdata.columns else ""
         _progress(_i_s + 1, _total_s, "Calculating slopes")
-        print(f"    {subj} [{_g}] fitting slopes across {len(sdata)} sessions...  ", end="\n", flush=True)
         sdata = sdata.sort_values(session_col)
         if len(sdata) < 2:
             continue

@@ -18,6 +18,14 @@ VERSION: 1.0 (Auto-detection, run_spec driven)
 """
 
 from __future__ import annotations
+
+# Atlas labels - embedded from atlas_labels.py (1_utilities/)
+try:
+    from atlas_labels import detect_atlas as _detect_atlas_labels, get_label as _get_label
+    _HAS_ATLAS_LABELS = True
+except ImportError:
+    _HAS_ATLAS_LABELS = False
+    def _get_label(atlas_key, node_id): return f"Node_{node_id}"
 from datetime import datetime
 
 import argparse
@@ -331,20 +339,25 @@ def detect_n_nodes(data_dir: Path, fmt: str) -> int:
 
 
 def detect_atlas_name(data_dir: Path) -> str:
-    """Try to extract atlas name from folder structure or filenames."""
-    known      = ["brainnectome", "brodmann", "aal", "schaefer", "destrieux", "desikan", "hcp"]
-    search_str = str(data_dir).lower()
+    """Detect atlas from folder/filenames using atlas_labels module."""
+    # Collect sample filenames for detection
+    sample_files = [f.name for f in list(data_dir.rglob("*.npy"))[:10] +
+                    list(data_dir.rglob("*.mat"))[:10]]
+    if _HAS_ATLAS_LABELS:
+        key = _detect_atlas_labels(data_dir, sample_files)
+        if key != "unknown":
+            print(f"  ✓ Atlas detected: {key} (from atlas_labels)")
+            return key
+    # Fallback: basic keyword matching
+    known = ["brainnectome", "brodmann", "aal", "hcp-mmp", "hcpex", "julichbrain",
+             "cerebra", "freesurfer", "schaefer", "destrieux", "desikan", "hcp",
+             "cerebellum", "thomas", "kleist", "campbell", "cha", "atag"]
+    search = str(data_dir).lower() + " " + " ".join(sample_files).lower()
     for name in known:
-        if name in search_str:
-            print(f"  ✓ Atlas detected: {name.capitalize()} (from path)")
-            return name.capitalize()
-    for f in data_dir.rglob("*.*"):
-        fname = f.name.lower()
-        for name in known:
-            if name in fname:
-                print(f"  ✓ Atlas detected: {name.capitalize()} (from filename)")
-                return name.capitalize()
-    print("  ⚠ Atlas name not detected, using 'Unknown'")
+        if name in search:
+            print(f"  ✓ Atlas detected: {name} (from path/filename)")
+            return name
+    print("  ⚠ Atlas not detected, using 'Unknown'")
     return "Unknown"
 
 
@@ -516,11 +529,13 @@ def build_node_records(subject: str, session, atlas: str, subj_meta: pd.Series,
     """Turn per-node metric arrays into a list of flat dicts (one per node)."""
     records = []
     for i in range(n_nodes):
+        node_id = i + 1
         rec = {
             "subject": subject,
             "session": session,
             "atlas":   atlas,
-            "node":    i + 1,
+            "node":    node_id,
+            "label":   _get_label(atlas, node_id),
         }
         if group_col: rec[group_col] = subj_meta.get(group_col, np.nan)
         if sex_col:   rec[sex_col]   = subj_meta.get(sex_col, np.nan)

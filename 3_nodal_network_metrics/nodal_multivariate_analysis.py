@@ -135,7 +135,7 @@ def detect_columns(node_df: pd.DataFrame) -> dict:
                     return co
         return None
 
-    exclude = {"subject", "session", "ses", "node", "group", "condition",
+    exclude = {"subject", "session", "ses", "node", "label", "group", "condition",
                "arm", "intervention", "sex", "gender", "age", "atlas",
                "hub_type", "community"}
 
@@ -236,8 +236,7 @@ def run_five_group_anova(node_df, metric_cols, group_col, groups, n_nodes):
     all_groups = groups["all"]
 
     for node in range(1, n_nodes + 1):
-        _progress(node, n_nodes, "Running analyses")
-        print(f"    node {node}/{n_nodes}: running ANOVA + t-tests + correlations...  ", end="\n", flush=True)
+        _progress(node, n_nodes, "5-Group ANOVA")
         nd = node_df[node_df["node"] == node]
         for metric in metric_cols:
             data = nd[nd[metric].notna()]

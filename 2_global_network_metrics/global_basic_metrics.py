@@ -18,6 +18,12 @@ VERSION: 3.0 (Auto-detection, run_spec driven)
 """
 
 from __future__ import annotations
+
+try:
+    from atlas_labels import detect_atlas as _detect_atlas_labels
+    _HAS_ATLAS_LABELS = True
+except ImportError:
+    _HAS_ATLAS_LABELS = False
 from datetime import datetime
 
 import argparse
@@ -356,27 +362,23 @@ def detect_n_nodes(data_dir: Path, fmt: str) -> int:
 
 
 def detect_atlas_name(data_dir: Path) -> str:
-    """
-    Try to extract atlas name from folder structure or filenames.
-    Falls back to 'unknown'.
-    """
-    known = ["brainnectome", "brodmann", "aal", "schaefer", "destrieux", "desikan", "hcp"]
-    search_str = str(data_dir).lower()
-
+    """Detect atlas from folder/filenames using atlas_labels module."""
+    sample_files = [f.name for f in list(data_dir.rglob("*.npy"))[:10] +
+                    list(data_dir.rglob("*.mat"))[:10]]
+    if _HAS_ATLAS_LABELS:
+        key = _detect_atlas_labels(data_dir, sample_files)
+        if key != "unknown":
+            print(f"  ✓ Atlas detected: {key} (from atlas_labels)")
+            return key
+    known = ["brainnectome", "brodmann", "aal", "hcp-mmp", "hcpex", "julichbrain",
+             "cerebra", "freesurfer", "schaefer", "destrieux", "desikan", "hcp",
+             "cerebellum", "thomas", "kleist", "campbell", "cha", "atag"]
+    search = str(data_dir).lower() + " " + " ".join(sample_files).lower()
     for name in known:
-        if name in search_str:
-            print(f"  ✓ Atlas detected: {name.capitalize()} (from path)")
-            return name.capitalize()
-
-    # Try first file name
-    for f in data_dir.rglob("*.*"):
-        fname = f.name.lower()
-        for name in known:
-            if name in fname:
-                print(f"  ✓ Atlas detected: {name.capitalize()} (from filename)")
-                return name.capitalize()
-
-    print("  ⚠ Atlas name not detected, using 'Unknown'")
+        if name in search:
+            print(f"  ✓ Atlas detected: {name} (from path/filename)")
+            return name
+    print("  ⚠ Atlas not detected, using 'Unknown'")
     return "Unknown"
 
 

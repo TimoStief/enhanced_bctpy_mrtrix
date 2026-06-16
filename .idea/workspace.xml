@@ -4,14 +4,24 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f7e9a91e-fb97-4b20-8b1d-bb3cedc819f7" name="Changes" comment="back up commit after first mock and laufstudie successful run" />
+    <list default="true" id="f7e9a91e-fb97-4b20-8b1d-bb3cedc819f7" name="Changes" comment="back up commit after first mock and laufstudie successful run">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/2_global_network_metrics/global_basic_metrics.py" beforeDir="false" afterPath="$PROJECT_DIR$/2_global_network_metrics/global_basic_metrics.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_hub_identification.py" beforeDir="false" afterPath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_hub_identification.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_multivariate_analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_multivariate_analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_temporal_trajectories.py" beforeDir="false" afterPath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_temporal_trajectories.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/4_statistical_classification/stat_random_forest_comparison.py" beforeDir="false" afterPath="$PROJECT_DIR$/4_statistical_classification/stat_random_forest_comparison.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/4_statistical_classification/stat_svm_stratified_5groups.py" beforeDir="false" afterPath="$PROJECT_DIR$/4_statistical_classification/stat_svm_stratified_5groups.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/4_statistical_classification/stat_svm_time_5groups.py" beforeDir="false" afterPath="$PROJECT_DIR$/4_statistical_classification/stat_svm_time_5groups.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/results_mock_brodmann/global/.~lock.global_metrics_summary_by_group_session.csv#" beforeDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="10717" />
+    <option name="cachedIndexableFilesCount" value="11538" />
   </component>
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
@@ -432,7 +442,15 @@
       <option name="project" value="LOCAL" />
       <updated>1780647344636</updated>
     </task>
-    <option name="localTasksCounter" value="39" />
+    <task id="LOCAL-00039" summary="back up commit after first mock and laufstudie successful run">
+      <option name="closed" value="true" />
+      <created>1780647609345</created>
+      <option name="number" value="00039" />
+      <option name="presentableId" value="LOCAL-00039" />
+      <option name="project" value="LOCAL" />
+      <updated>1780647609345</updated>
+    </task>
+    <option name="localTasksCounter" value="40" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

@@ -126,7 +126,7 @@ def detect_session_col(node_df: pd.DataFrame) -> str:
 
 
 def detect_metric_cols(node_df: pd.DataFrame) -> list:
-    exclude = {"subject", "session", "ses", "node", "group", "condition",
+    exclude = {"subject", "session", "ses", "node", "label", "group", "condition",
                "arm", "intervention", "sex", "gender", "age", "atlas",
                "hub_type", "community"}
     metrics = [c for c in node_df.columns
@@ -425,26 +425,29 @@ def main() -> None:
     # Intervention effects / Single-group temporal effects
     if single_group_mode:
         print("\nComputing temporal effect sizes (single-group)...")
-        # trajectory_df already has slope per node/metric/group
-        # Use slope magnitude and change_direction as effect size
+        # In single-group mode: effect size = slope significance across subjects
+        from scipy import stats as _stats
         records = []
-        for _, row in trajectory_df.iterrows():
-            # Normalize slope by mean_value to get relative change
-            mean_val = abs(float(row["mean_value"])) if row["mean_value"] != 0 else 1.0
-            rel_slope = float(row["slope"]) / mean_val
-            records.append({
-                "node":                 int(row["node"]),
-                "metric":               str(row["metric"]),
-                "mean_slope":           float(row["slope"]),
-                "change_magnitude":     float(row["change_magnitude"]),
-                "change_direction":     str(row["change_direction"]),
-                "relative_slope":       float(rel_slope),
-                "abs_effect_size":      float(abs(rel_slope)),
-                "effect_size_cohens_d": float(rel_slope),
-                "r_squared":            float(row["r_squared"]),
-                "n_sessions":           int(row["n_sessions"]),
-                "significant":          bool(abs(rel_slope) > 0.01),
-            })
+        for metric in trajectory_df["metric"].unique():
+            for node in range(1, n_nodes + 1):
+                node_data = trajectory_df[
+                    (trajectory_df["node"] == node) &
+                    (trajectory_df["metric"] == metric)
+                ]["slope"].dropna().values
+                if len(node_data) >= 3:
+                    t_stat, p_val = _stats.ttest_1samp(node_data, 0)
+                    cohens_d = node_data.mean() / (node_data.std() + 1e-10)
+                    records.append({
+                        "node": node, "metric": metric,
+                        "mean_slope": float(node_data.mean()),
+                        "std_slope":  float(node_data.std()),
+                        "t_statistic": float(t_stat),
+                        "p_value":    float(p_val),
+                        "effect_size_cohens_d": float(cohens_d),
+                        "abs_effect_size": float(abs(cohens_d)),
+                        "significant": bool(p_val < 0.05),
+                        "n_subjects": len(node_data),
+                    })
         effects_df = pd.DataFrame(records)
         print(f"  + {len(effects_df)} node x metric temporal effects computed")
         effects_df.to_parquet(output_dir / "temporal_effect_sizes.parquet", index=False)
@@ -453,10 +456,9 @@ def main() -> None:
 
         # Top nodes
         if not effects_df.empty:
-            available_cols = ["node", "metric", "mean_slope", "abs_effect_size",
-                                "effect_size_cohens_d", "change_direction", "r_squared", "significant"]
-            top_cols = [c for c in available_cols if c in effects_df.columns]
-            top = effects_df.nlargest(20, "abs_effect_size")[top_cols]
+            top = effects_df.nlargest(20, "abs_effect_size")[
+                ["node", "metric", "mean_slope", "effect_size_cohens_d", "p_value", "significant"]
+            ]
             print("\nTop 20 nodes with strongest temporal changes:")
             print(top.to_string(index=False))
             top.to_csv(output_dir / "top_temporal_nodes.csv", index=False)
@@ -484,10 +486,7 @@ def main() -> None:
 
     # Plots
     print("\nCreating plots...")
-    if effects_df.empty:
-        print("  ⚠ No effects to plot — skipping plots")
-    else:
-        make_plots(effects_df, hub_df, trajectory_df, output_dir / "plots")
+    make_plots(effects_df, hub_df, trajectory_df, output_dir / "plots")
 
     # Summary
     _end_time = datetime.now()

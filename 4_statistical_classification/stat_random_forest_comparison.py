@@ -328,7 +328,7 @@ def feature_importance_anova(X: np.ndarray, y: np.ndarray,
         except Exception:
             f, p = np.nan, np.nan
         rows.append({"feature": col, "f_score": f, "p_value": p})
-    return pd.DataFrame(rows).sort_values("f_score", ascending=False)
+    return pd.DataFrame(rows).sort_values("f_score", ascending=False, na_position="last")
 
 
 # ============================================================================

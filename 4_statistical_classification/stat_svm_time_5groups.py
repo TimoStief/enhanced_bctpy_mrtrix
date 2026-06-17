@@ -231,7 +231,8 @@ def train_random_forest(X: pd.DataFrame, y: pd.Series) -> dict:
     rf = RandomForestClassifier(n_estimators=500, max_depth=10,
                                 min_samples_split=5, min_samples_leaf=2,
                                 class_weight="balanced", random_state=42, n_jobs=-1)
-    cv = cross_val_score(rf, X, y, cv=min(5, len(y.unique())))
+    n_cv = max(2, min(5, int(y.value_counts().min())))
+    cv = cross_val_score(rf, X, y, cv=n_cv)
     rf.fit(X, y)
     y_pred = rf.predict(X)
 
@@ -254,7 +255,8 @@ def train_svm(X: pd.DataFrame, y: pd.Series) -> dict:
     X_scaled = scaler.fit_transform(X)
     svm      = SVC(kernel="rbf", C=1.0, gamma="scale",
                    class_weight="balanced", probability=True, random_state=42)
-    cv = cross_val_score(svm, X_scaled, y, cv=min(5, len(y.unique())))
+    n_cv = max(2, min(5, int(y.value_counts().min())))
+    cv = cross_val_score(svm, X_scaled, y, cv=n_cv)
     svm.fit(X_scaled, y)
     y_pred = svm.predict(X_scaled)
 
@@ -277,7 +279,7 @@ def feature_importance_anova(X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
         except Exception:
             f, p = np.nan, np.nan
         rows.append({"feature": col, "f_score": f, "p_value": p})
-    return pd.DataFrame(rows).sort_values("f_score", ascending=False)
+    return pd.DataFrame(rows).sort_values("f_score", ascending=False, na_position="last")
 
 
 # ============================================================================

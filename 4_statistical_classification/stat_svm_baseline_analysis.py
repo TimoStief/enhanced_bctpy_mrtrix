@@ -464,7 +464,7 @@ def run_variant(slopes_df: pd.DataFrame, group_col: str, sex_col: str | None,
     if variant == "social":
         if not groups["alone"] or not groups["social"]:
             print(f"  x Skipping social variant — alone or social groups not detected")
-            print(f"    Detected groups: {groups['all']}")
+            print(f"    Detected groups: {list(groups.keys())}")
             print(f"    Fix: add 'alone_groups' and 'group_groups' to CLI flags")
             return {}
         group_new    = remap_groups(slopes_df[group_col], groups["alone"],
@@ -476,7 +476,7 @@ def run_variant(slopes_df: pd.DataFrame, group_col: str, sex_col: str | None,
     elif variant == "duration":
         if not groups["short"] or not groups["long"]:
             print(f"  x Skipping duration variant — short or long groups not detected")
-            print(f"    Detected groups: {groups['all']}")
+            print(f"    Detected groups: {list(groups.keys())}")
             print(f"    Fix: add 'short_groups' and 'long_groups' to CLI flags")
             return {}
         group_new    = remap_groups(slopes_df[group_col], groups["short"],

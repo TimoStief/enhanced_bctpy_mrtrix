@@ -268,7 +268,7 @@ def feature_importance(X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
         except Exception:
             f, p = np.nan, np.nan
         rows.append({"feature": col, "f_score": f, "p_value": p})
-    return pd.DataFrame(rows).sort_values("f_score", ascending=False)
+    return pd.DataFrame(rows).sort_values("f_score", ascending=False, na_position="last")
 
 
 # ============================================================================

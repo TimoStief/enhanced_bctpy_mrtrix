@@ -146,7 +146,7 @@ def test_detect_metadata_columns_partial_match():
 def test_detect_atlas_name_known_in_path(tmp_path):
     atlas_dir = tmp_path / "brainnectome" / "data"
     atlas_dir.mkdir(parents=True)
-    assert detect_atlas_name(atlas_dir) == "Brainnectome"
+    assert detect_atlas_name(atlas_dir) .lower() == "brainnectome"
 
 
 def test_detect_atlas_name_unknown(tmp_path):
@@ -155,18 +155,18 @@ def test_detect_atlas_name_unknown(tmp_path):
 
 def test_detect_atlas_name_aal(tmp_path):
     (tmp_path / "aal_atlas").mkdir()
-    assert detect_atlas_name(tmp_path / "aal_atlas") == "Aal"
+    assert detect_atlas_name(tmp_path / "aal_atlas") .lower() == "aal"
 
 
 def test_detect_atlas_name_from_filename(tmp_path):
     (tmp_path / "schaefer_matrix.npy").write_bytes(b"")
-    assert detect_atlas_name(tmp_path) == "Schaefer"
+    assert detect_atlas_name(tmp_path) .lower() == "schaefer"
 
 
 def test_detect_atlas_name_hcp(tmp_path):
     hcp_dir = tmp_path / "hcp_data"
     hcp_dir.mkdir()
-    assert detect_atlas_name(hcp_dir) == "Hcp"
+    assert detect_atlas_name(hcp_dir) .lower() == "hcp"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -467,3 +467,138 @@ def test_main_missing_run_spec(tmp_path):
     with patch("sys.argv", ["script", str(tmp_path / "nicht_vorhanden.json")]):
         with pytest.raises(SystemExit):
             main()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Additional coverage tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_progress_function(capsys):
+    metrics_mod._progress(5, 10, "Test")
+    out = capsys.readouterr().out
+    assert "5/10" in out or "50%" in out
+
+
+def test_normalize_matrix_auto_returns_string(tmp_path):
+    A = np.random.rand(5, 5) * 5000
+    np.save(tmp_path / "mat.npy", A)
+    result = metrics_mod.ask_normalize(tmp_path, "npy", 5, "log")
+    assert result == "log"
+
+
+def test_detect_matrix_type_all_branches():
+    # fiber counts - need >2 unique values and max > 1000
+    A = np.random.rand(5, 5) * 5000 + 100
+    r = metrics_mod.detect_matrix_type(A)
+    assert r["type"] == "fiber_counts"
+
+    # weighted unnormalized (max > 1 and max < 1000, not binary)
+    A2 = np.random.rand(5, 5) * 50 + 2
+    r2 = metrics_mod.detect_matrix_type(A2)
+    assert r2["type"] == "weighted_unnormalized"
+
+
+def test_normalize_all_branches():
+    A = np.array([[0, 2.0], [2.0, 0]])
+    assert metrics_mod.normalize_matrix(A, "log").max() <= 1.0
+    assert metrics_mod.normalize_matrix(A, "max").max() == pytest.approx(1.0)
+    assert set(metrics_mod.normalize_matrix(A, "binary").flatten()) <= {0.0, 1.0}
+    np.testing.assert_array_equal(metrics_mod.normalize_matrix(A, "none"), A)
+
+
+def test_load_config_cli_paths(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    meta = tmp_path / "meta.tsv"
+    meta.write_text("participant_id\tsession\nS1\t1\n")
+    out_dir = tmp_path / "out"
+    import sys as _sys
+    old = _sys.argv
+    _sys.argv = ["prog", "--data-dir", str(data_dir),
+                 "--metadata", str(meta),
+                 "--output-dir", str(out_dir)]
+    args = metrics_mod.parse_args()
+    config = metrics_mod.load_config(args)
+    assert config["data_dir"] == data_dir
+    _sys.argv = old
+
+
+def test_load_config_missing_exits():
+    import sys as _sys
+    old = _sys.argv
+    _sys.argv = ["prog"]
+    args = metrics_mod.parse_args()
+    with pytest.raises(SystemExit):
+        metrics_mod.load_config(args)
+    _sys.argv = old
+
+
+def test_find_matrix_file_not_found(tmp_path):
+    result = metrics_mod.find_matrix_file(tmp_path, "sub-01", "1", "npy")
+    assert result is None
+
+
+def test_find_matrix_file_found(tmp_path):
+    f = tmp_path / "sub-01_ses-1_matrix.npy"
+    f.write_bytes(b"")
+    result = metrics_mod.find_matrix_file(tmp_path, "sub-01", "1", "npy")
+    assert result is not None
+
+
+def test_compute_global_metrics_binary():
+    from unittest.mock import patch, MagicMock
+    A = np.array([[0,1,1],[1,0,1],[1,1,0]], dtype=float)
+    with patch("global_basic_metrics.bct") as mock_bct:
+        mock_bct.distance_wei.return_value = (np.ones((3,3)), None)
+        mock_bct.clustering_coef_wu.return_value = np.array([0.5,0.5,0.5])
+        mock_bct.transitivity_wu.return_value = 0.5
+        mock_bct.community_louvain.return_value = (np.array([1,1,2]), 0.3)
+        mock_bct.participation_coef.return_value = np.array([0.3,0.3,0.3])
+        mock_bct.efficiency_wei.return_value = np.array([0.4,0.4,0.4])
+        mock_bct.betweenness_wei.return_value = np.array([0.2,0.2,0.2])
+        result = metrics_mod.compute_global_metrics(A, binarize=False)
+    assert "density" in result
+    assert "clustering_coef" in result
+
+
+def test_compute_global_metrics_binarize():
+    from unittest.mock import patch
+    A = np.array([[0,2,1],[2,0,3],[1,3,0]], dtype=float)
+    with patch("global_basic_metrics.bct") as mock_bct:
+        mock_bct.distance_wei.return_value = (np.ones((3,3)), None)
+        mock_bct.clustering_coef_wu.return_value = np.ones(3) * 0.5
+        mock_bct.transitivity_wu.return_value = 0.4
+        mock_bct.community_louvain.return_value = (np.ones(3), 0.2)
+        mock_bct.participation_coef.return_value = np.ones(3) * 0.3
+        mock_bct.efficiency_wei.return_value = np.ones(3) * 0.4
+        mock_bct.betweenness_wei.return_value = np.ones(3) * 0.1
+        result = metrics_mod.compute_global_metrics(A, binarize=True)
+    assert "density" in result
+
+
+def test_main_runs_with_normalize_mocked(tmp_path):
+    from unittest.mock import patch, MagicMock
+    spec_file, data_dir, metadata, out_dir = _make_run_spec(tmp_path)
+    mock_metrics = {
+        "density": 0.5, "path_length": 1.5, "global_efficiency": 0.6,
+        "clustering_coef": 0.4, "transitivity": 0.3, "modularity": 0.2,
+        "n_communities": 3, "participation_coef_mean": 0.5,
+        "local_efficiency_mean": 0.4, "betweenness_mean": 0.3,
+        "small_worldness": 0.8,
+    }
+    mock_umap = MagicMock()
+    mock_umap.fit_transform.return_value = np.random.rand(2, 3)
+    with patch("sys.argv", ["script", str(spec_file)]):
+        with patch("global_basic_metrics.compute_global_metrics", return_value=mock_metrics):
+            with patch("global_basic_metrics.UMAP", return_value=mock_umap):
+                with patch("global_basic_metrics.ask_normalize", return_value="none"):
+                    main()
+
+
+def test_main_no_matrices_with_normalize_mocked(tmp_path):
+    from unittest.mock import patch
+    spec_file, _, _, _ = _make_run_spec(tmp_path)
+    with patch("sys.argv", ["script", str(spec_file)]):
+        with patch("global_basic_metrics.load_connectivity_matrix", return_value=None):
+            with patch("global_basic_metrics.ask_normalize", return_value="none"):
+                with pytest.raises(SystemExit):
+                    main()

@@ -262,7 +262,7 @@ def compute_hub_responses(node_df, trajectory_df, intervention_groups,
     return pd.DataFrame(records)
 
 
-def test_hub_type_effects(hub_df):
+def analyze_hub_type_effects(hub_df):
     hub_types = hub_df["hub_type"].unique()
     for metric in hub_df["metric"].unique():
         m_data = hub_df[hub_df["metric"] == metric]
@@ -480,7 +480,7 @@ def main() -> None:
         node_df, trajectory_df, intervention_groups, control_group, group_col, n_nodes
     ) if not single_group_mode else pd.DataFrame()
     if not hub_df.empty:
-        test_hub_type_effects(hub_df)
+        analyze_hub_type_effects(hub_df)
         hub_df.to_parquet(output_dir / "hub_specific_responses.parquet", index=False)
         print("  + Saved: hub_specific_responses.parquet")
 

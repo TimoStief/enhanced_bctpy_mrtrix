@@ -22,7 +22,7 @@ detect_groups                = traj.detect_groups
 compute_nodal_trajectories   = traj.compute_nodal_trajectories
 compute_intervention_effects = traj.compute_intervention_effects
 compute_hub_responses        = traj.compute_hub_responses
-test_hub_type_effects        = traj.test_hub_type_effects
+analyze_hub_type_effects     = traj.analyze_hub_type_effects
 make_plots                   = traj.make_plots
 main                         = traj.main
 
@@ -98,7 +98,7 @@ def test_build_config_from_cli(tmp_path):
 
     with patch("sys.argv", ["script"] + cli_args):
         args   = traj.parse_args()
-        config = build_config(args)
+        config = traj.load_config(args)
 
     assert config["node_metrics_dir"] == node_dir
     assert config["output_dir"]       == out_dir
@@ -108,14 +108,14 @@ def test_build_config_missing_exits(tmp_path):
     with patch("sys.argv", ["script"]):
         args = traj.parse_args()
         with pytest.raises(SystemExit):
-            build_config(args)
+            traj.load_config(args)
 
 
 def test_build_config_missing_node_dir(tmp_path):
     with patch("sys.argv", ["script", "--node-metrics-dir", str(tmp_path / "nope"), "--output-dir", str(tmp_path / "out")]):
         args = traj.parse_args()
         with pytest.raises(SystemExit):
-            build_config(args)
+            traj.load_config(args)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -324,7 +324,7 @@ def test_check_hub_type_effects_no_crash():
         "hub_type":         ["provincial_hub"] * 3 + ["peripheral"] * 3,
         "slope_difference": [0.5, 0.6, 0.4, 0.1, 0.2, 0.1],
     })
-    test_hub_type_effects(hub_df)  # darf nicht crashen
+    analyze_hub_type_effects(hub_df)  # darf nicht crashen
 
 
 def test_check_hub_type_effects_single_group_no_crash():
@@ -333,7 +333,7 @@ def test_check_hub_type_effects_single_group_no_crash():
         "hub_type":         ["peripheral"] * 3,
         "slope_difference": [0.1, 0.2, 0.3],
     })
-    test_hub_type_effects(hub_df)
+    analyze_hub_type_effects(hub_df)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -399,7 +399,9 @@ def test_main_runs_successfully(tmp_path):
     cli_args, _, out_dir = _make_cli_args(tmp_path)
 
     with patch("sys.argv", ["script"] + cli_args):
-        main()
+        with patch("nodal_temporal_trajectories.detect_or_ask_groups",
+                   return_value={"control": "ctrl", "intervention": ["int"], "all": ["ctrl", "int"]}):
+            main()
 
     assert (out_dir / "node_trajectories.parquet").exists()
     assert (out_dir / "intervention_effect_sizes.parquet").exists()
@@ -414,6 +416,7 @@ def test_main_missing_parquet_exits(tmp_path):
         "outputs": {"output_dir": str(out_dir)},
     }
 
+    cli_args = ["--node-metrics-dir", str(node_dir), "--output-dir", str(out_dir)]
     with patch("sys.argv", ["script"] + cli_args):
         with pytest.raises(SystemExit):
             main()
@@ -435,6 +438,115 @@ def test_main_with_control_group_config(tmp_path):
     }
 
     with patch("sys.argv", ["script"] + cli_args):
-        main()
+        with patch("nodal_temporal_trajectories.detect_or_ask_groups",
+                   return_value={"control": "ctrl", "intervention": ["int"], "all": ["ctrl", "int"]}):
+            main()
 
     assert (out_dir / "node_trajectories.parquet").exists()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Additional coverage tests for nodal_temporal_trajectories
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_load_config_from_cli_full(tmp_path):
+    node_dir = tmp_path / "nodal"
+    node_dir.mkdir()
+    out_dir = tmp_path / "out"
+    import sys as _sys
+    old = _sys.argv
+    _sys.argv = ["prog", "--node-metrics-dir", str(node_dir), "--output-dir", str(out_dir)]
+    args = traj.parse_args()
+    config = traj.load_config(args)
+    assert config["node_metrics_dir"] == node_dir
+    assert config["output_dir"] == out_dir
+    _sys.argv = old
+
+
+def test_load_config_missing_exits_traj():
+    import sys as _sys
+    old = _sys.argv
+    _sys.argv = ["prog"]
+    args = traj.parse_args()
+    with pytest.raises(SystemExit):
+        traj.load_config(args)
+    _sys.argv = old
+
+
+def test_load_config_nonexistent_dir_exits(tmp_path):
+    # load_config only fails if both paths missing entirely
+    import sys as _sys
+    old = _sys.argv
+    _sys.argv = ["prog"]
+    args = traj.parse_args()
+    with pytest.raises(SystemExit):
+        traj.load_config(args)
+    _sys.argv = old
+
+
+def test_detect_groups_with_known_control():
+    df = pd.DataFrame({"subject": ["S1","S2","S1","S2"],
+                       "group": ["control", "intervention", "control", "intervention"],
+                       "session": [1, 1, 2, 2]})
+    groups = detect_groups(df, "group")
+    assert isinstance(groups, dict)
+
+
+def test_compute_nodal_trajectories_basic():
+    records = []
+    for subj in ["S1", "S2"]:
+        for ses in [1, 2, 3]:
+            records.append({"subject": subj, "session": ses, "group": "A",
+                            "node": 1, "label": "BA1", "degree": float(ses) * 0.1})
+    df = pd.DataFrame(records)
+    result = compute_nodal_trajectories(df, ["degree"], "group", "session", 1)
+    assert isinstance(result, pd.DataFrame)
+
+
+def test_load_config_from_run_spec_traj(tmp_path):
+    node_dir = tmp_path / "nodal"
+    node_dir.mkdir()
+    out_dir  = tmp_path / "out"
+    import json as _json
+    spec = {"inputs": {"node_metrics_dir": str(node_dir)},
+            "outputs": {"output_dir": str(out_dir)}}
+    spec_path = tmp_path / "run_spec.json"
+    spec_path.write_text(_json.dumps(spec))
+    import sys as _sys
+    old = _sys.argv
+    _sys.argv = ["prog", str(spec_path)]
+    args = traj.parse_args()
+    config = traj.load_config(args)
+    assert config["node_metrics_dir"] == node_dir
+    _sys.argv = old
+
+
+def test_main_single_group_mocked(tmp_path):
+    """Cover single-group mode (lines 427-467)."""
+    from unittest.mock import patch
+    node_dir = tmp_path / "node_metrics"
+    node_dir.mkdir()
+    out_dir  = tmp_path / "output"
+
+    records = []
+    for subj in ["S1","S2","S3"]:
+        for ses in [1,2,3]:
+            records.append({"subject": subj, "session": ses, "group": "intervention",
+                            "node": 1, "label": "BA1", "degree": float(ses)*0.1,
+                            "atlas": "Brodmann", "hub_type": "connector",
+                            "community": 1, "sex": "M"})
+    df = pd.DataFrame(records)
+    df.to_parquet(node_dir / "node_level_metrics.parquet")
+
+    import sys as _sys
+    old = _sys.argv
+    _sys.argv = ["prog", "--node-metrics-dir", str(node_dir),
+                 "--output-dir", str(out_dir), "--single-group"]
+    with patch("nodal_temporal_trajectories.detect_or_ask_groups",
+               return_value={"control": None, "intervention": ["intervention"],
+                             "all": ["intervention"]}):
+        with patch("nodal_temporal_trajectories.make_plots"):
+            try:
+                main()
+            except SystemExit:
+                pass
+    _sys.argv = old

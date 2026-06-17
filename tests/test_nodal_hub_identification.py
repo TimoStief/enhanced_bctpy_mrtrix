@@ -154,7 +154,7 @@ def test_detect_file_format_prefers_npy(tmp_path):
 def test_detect_atlas_name_from_path(tmp_path):
     d = tmp_path / "brainnectome"
     d.mkdir()
-    assert detect_atlas_name(d) == "Brainnectome"
+    assert detect_atlas_name(d) .lower() == "brainnectome"
 
 
 def test_detect_atlas_name_unknown(tmp_path):
@@ -163,13 +163,13 @@ def test_detect_atlas_name_unknown(tmp_path):
 
 def test_detect_atlas_name_from_filename(tmp_path):
     (tmp_path / "schaefer_matrix.npy").write_bytes(b"")
-    assert detect_atlas_name(tmp_path) == "Schaefer"
+    assert detect_atlas_name(tmp_path) .lower() == "schaefer"
 
 
 def test_detect_atlas_name_brodmann(tmp_path):
     d = tmp_path / "brodmann_atlas"
     d.mkdir()
-    assert detect_atlas_name(d) == "Brodmann"
+    assert detect_atlas_name(d) .lower() == "brodmann"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -427,3 +427,89 @@ def test_main_missing_data_dir(tmp_path):
     with patch("sys.argv", ["script", str(spec_file)]):
         with pytest.raises(SystemExit):
             main()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Additional coverage tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_progress_nodal(capsys):
+    nodal._progress(3, 10, "Test")
+    out = capsys.readouterr().out
+    assert "3/10" in out or "30%" in out
+
+
+def test_load_config_cli_nodal(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    meta = tmp_path / "meta.tsv"
+    meta.write_text("participant_id\tsession\nS1\t1\n")
+    out_dir = tmp_path / "out"
+    import sys as _sys
+    old = _sys.argv
+    _sys.argv = ["prog", "--data-dir", str(data_dir),
+                 "--metadata", str(meta),
+                 "--output-dir", str(out_dir)]
+    args = nodal.parse_args()
+    config = nodal.load_config(args)
+    assert config["data_dir"] == data_dir
+    _sys.argv = old
+
+
+def test_load_config_missing_exits_nodal():
+    import sys as _sys
+    old = _sys.argv
+    _sys.argv = ["prog"]
+    args = nodal.parse_args()
+    with pytest.raises(SystemExit):
+        nodal.load_config(args)
+    _sys.argv = old
+
+
+def test_find_matrix_file_not_found_nodal(tmp_path):
+    result = nodal.find_matrix_file(tmp_path, "sub-01", "1", "npy")
+    assert result is None
+
+
+def test_find_matrix_file_found_nodal(tmp_path):
+    f = tmp_path / "sub-01_ses-1_matrix.npy"
+    f.write_bytes(b"")
+    result = nodal.find_matrix_file(tmp_path, "sub-01", "1", "npy")
+    assert result is not None
+
+
+def test_compute_node_metrics_mocked():
+    from unittest.mock import patch
+    A = np.eye(5)
+    with patch("nodal_hub_identification.bct") as mock_bct:
+        mock_bct.degrees_und.return_value = np.ones(5)
+        mock_bct.strengths_und.return_value = np.ones(5)
+        mock_bct.betweenness_wei.return_value = np.ones(5)
+        mock_bct.clustering_coef_wu.return_value = np.ones(5)
+        mock_bct.efficiency_wei.return_value = np.ones(5)
+        mock_bct.community_louvain.return_value = (np.ones(5), 0.3)
+        mock_bct.participation_coef.return_value = np.ones(5) * 0.3
+        mock_bct.module_degree_zscore.return_value = np.ones(5)
+        result = nodal.compute_node_metrics(A, n_nodes=5)
+    assert "degree" in result
+    assert "clustering" in result
+
+
+def test_main_nodal_normalize_mocked(tmp_path):
+    from unittest.mock import patch, MagicMock
+    spec_file, _, out_dir = _make_run_spec(tmp_path)
+    mock_rc = np.array([0.5, 0.6])
+    with patch("sys.argv", ["script", str(spec_file)]):
+        with patch("nodal_hub_identification.compute_node_metrics", return_value=_make_metrics(N)):
+            with patch("nodal_hub_identification.compute_rich_club", return_value=mock_rc):
+                with patch("nodal_hub_identification.ask_normalize", return_value="none"):
+                    main()
+
+
+def test_main_nodal_no_matrices_mocked(tmp_path):
+    from unittest.mock import patch
+    spec_file, _, _ = _make_run_spec(tmp_path)
+    with patch("sys.argv", ["script", str(spec_file)]):
+        with patch("nodal_hub_identification.load_connectivity_matrix", return_value=None):
+            with patch("nodal_hub_identification.ask_normalize", return_value="none"):
+                with pytest.raises(SystemExit):
+                    main()

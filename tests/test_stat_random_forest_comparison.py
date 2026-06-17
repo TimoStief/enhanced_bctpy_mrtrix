@@ -204,7 +204,7 @@ def test_train_svm_model_returns_dict():
 def test_feature_importance_anova_sorted():
     X = np.array([[1, 0.1], [2, 0.1], [3, 0.1], [4, 0.1]])
     y = np.array([0, 0, 1, 1])
-    result = feature_importance_anova(X, y, ["a", "b"])
+    result = feature_importance_anova(X, y)
     assert result.iloc[0]["f_score"] >= result.iloc[-1]["f_score"]
 
 

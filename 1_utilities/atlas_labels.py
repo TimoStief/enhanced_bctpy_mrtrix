@@ -2412,9 +2412,15 @@ def detect_atlas(data_dir: "Path | str", sample_filenames: list[str] | None = No
 
 def get_label(atlas_key: str, node_id: int) -> str:
     """Return anatomical label for a node. Falls back to Node_{id}."""
-    if atlas_key not in ATLAS_DB:
+    # Case-insensitive lookup
+    key = atlas_key
+    if key not in ATLAS_DB:
+        key = atlas_key.capitalize()
+    if key not in ATLAS_DB:
+        key = next((k for k in ATLAS_DB if k.lower() == atlas_key.lower()), None)
+    if not key:
         return f"Node_{node_id}"
-    labels = ATLAS_DB[atlas_key].get("labels", {})
+    labels = ATLAS_DB[key].get("labels", {})
     return labels.get(str(node_id), f"Node_{node_id}")
 
 

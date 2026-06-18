@@ -562,9 +562,12 @@ def main() -> None:
 
         # Top nodes
         if not effects_df.empty:
-            top = effects_df.nlargest(20, "abs_effect_size")[
-                ["node", "metric", "mean_slope", "effect_size_cohens_d", "p_value", "significant"]
-            ]
+            # Include label if available
+            _top_cols = ["node"]
+            if "label" in effects_df.columns:
+                _top_cols.append("label")
+            _top_cols += ["metric", "mean_slope", "effect_size_cohens_d", "p_value", "significant"]
+            top = effects_df.nlargest(20, "abs_effect_size")[_top_cols]
             print("\nTop 20 nodes with strongest temporal changes:")
             print(top.to_string(index=False))
             top.to_csv(output_dir / "top_temporal_nodes.csv", index=False)

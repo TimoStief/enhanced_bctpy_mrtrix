@@ -553,25 +553,126 @@ def main() -> None:
                         "abs_effect_size":     float(abs(cohens_d)),
                         "significant":         bool(p_val < 0.05),
                         "n_subjects":          len(subject_slopes),
+                        "_slopes":             slopes_arr.tolist(),  # store for permutation
                     })
         effects_df = pd.DataFrame(records)
         print(f"  + {len(effects_df)} node x metric temporal effects computed")
+
+        # ── Multiple comparisons correction ──────────────────────────────
+        if not effects_df.empty:
+            print("\n  Apply multiple comparisons correction?")
+            print("    [1] FDR only (Benjamini-Hochberg) — fast, standard")
+            print("    [2] Permutation only (1000x) — slower, model-free")
+            print("    [3] FDR + Permutation — most complete")
+            print("    [0] None — skip (for group comparisons: not needed, SVM/RF handle it)")
+            _mc_choice = input("  > ").strip()
+
+            if _mc_choice in ("1", "3"):
+                print("  FDR threshold (q)? Enter value or press Enter for default")
+                print("    Recommended: 0.05 (standard) | 0.1 (small samples, n<30)")
+                _fdr_input = input("  > ").strip()
+                try:
+                    _fdr_alpha = float(_fdr_input) if _fdr_input else 0.05
+                except ValueError:
+                    _fdr_alpha = 0.05
+                print(f"  Using FDR threshold: q < {_fdr_alpha}")
+                from scipy.stats import false_discovery_control
+                p_vals = effects_df["p_value"].values
+                try:
+                    p_fdr = false_discovery_control(p_vals, method="bh")
+                except Exception:
+                    from statsmodels.stats.multitest import multipletests
+                    _, p_fdr, _, _ = multipletests(p_vals, method="fdr_bh")
+                effects_df["p_fdr"] = p_fdr
+                effects_df["significant_fdr"] = p_fdr < _fdr_alpha
+                effects_df[f"sig_fdr_q{_fdr_alpha}"] = p_fdr < _fdr_alpha
+                n_fdr = effects_df["significant_fdr"].sum()
+                print(f"  ✓ FDR correction applied: {n_fdr}/{len(effects_df)} significant (q<{_fdr_alpha})")
+
+            if _mc_choice in ("2", "3"):
+                print("  How many permutations? Enter value or press Enter for default")
+                print("    Recommended: 1000 (fast) | 5000 (more stable) | 10000 (publication-ready)")
+                _nperm_input = input("  > ").strip()
+                try:
+                    n_perm = int(_nperm_input) if _nperm_input else 1000
+                except ValueError:
+                    n_perm = 1000
+                print("  Permutation threshold (p)? Enter value or press Enter for default")
+                print("    Recommended: 0.05 (standard)")
+                _perm_input = input("  > ").strip()
+                try:
+                    _perm_alpha = float(_perm_input) if _perm_input else 0.05
+                except ValueError:
+                    _perm_alpha = 0.05
+                print(f"  Running permutation test ({n_perm}x)...")
+                import numpy as _np2
+                from scipy import stats as _stats2
+                obs_t  = effects_df["t_statistic"].values
+
+                # Use slopes already computed (stored in _slopes column)
+                _slope_list = [
+                    _np2.array(row["_slopes"]) if "_slopes" in effects_df.columns and len(row["_slopes"]) >= 2
+                    else _np2.array([0.0])
+                    for _, row in effects_df.iterrows()
+                ]
+
+                # Permutation: sign-flip test (correct for one-sample t-test)
+                # Randomly flip signs of slopes → tests if mean is systematically != 0
+                perm_t = _np2.zeros((n_perm, len(obs_t)))
+                for p in range(n_perm):
+                    if p % max(1, n_perm // 10) == 0:
+                        print(f"    {p}/{n_perm}...", end="\r")
+                    for j, slopes in enumerate(_slope_list):
+                        if len(slopes) >= 2:
+                            signs    = _np2.random.choice([-1, 1], size=len(slopes))
+                            flipped  = slopes * signs
+                            t, _     = _stats2.ttest_1samp(flipped, 0)
+                            perm_t[p, j] = t
+                        else:
+                            perm_t[p, j] = 0.0
+
+                p_perm = _np2.mean(_np2.abs(perm_t) >= _np2.abs(obs_t), axis=0)
+                effects_df["p_perm"] = p_perm
+                effects_df["significant_perm"] = p_perm < _perm_alpha
+                effects_df[f"sig_perm_p{_perm_alpha}_n{n_perm}"] = p_perm < _perm_alpha
+                n_perm_sig = effects_df["significant_perm"].sum()
+                print(f"  ✓ Permutation done: {n_perm_sig}/{len(effects_df)} significant (p<{_perm_alpha}, n={n_perm})")
+        if "_slopes" in effects_df.columns:
+            effects_df = effects_df.drop(columns=["_slopes"])
         effects_df.to_parquet(output_dir / "temporal_effect_sizes.parquet", index=False)
-        effects_df.to_csv(output_dir / "temporal_effect_sizes.csv", index=False)
+        effects_df.to_csv(output_dir / "temporal_effect_sizes.csv", index=False, sep=";")
         print("  + Saved: temporal_effect_sizes.parquet + .csv")
 
         # Top nodes
         if not effects_df.empty:
-            # Include label if available
+            # Build significant nodes output - include all correction columns
             _top_cols = ["node"]
             if "label" in effects_df.columns:
                 _top_cols.append("label")
             _top_cols += ["metric", "mean_slope", "effect_size_cohens_d", "p_value", "significant"]
-            top = effects_df.nlargest(20, "abs_effect_size")[_top_cols]
-            print("\nTop 20 nodes with strongest temporal changes:")
+            if "p_fdr" in effects_df.columns:
+                _fdr_labeled = [c for c in effects_df.columns if c.startswith("sig_fdr_")]
+                _top_cols += ["p_fdr"] + _fdr_labeled
+            if "p_perm" in effects_df.columns:
+                _perm_labeled = [c for c in effects_df.columns if c.startswith("sig_perm_")]
+                _top_cols += ["p_perm"] + _perm_labeled
+
+            # Filter: uncorrected significant OR survived any correction
+            _sig_mask = effects_df["significant"] == True
+            for _labeled_col in [c for c in effects_df.columns if c.startswith("sig_fdr_") or c.startswith("sig_perm_")]:
+                _sig_mask = _sig_mask | (effects_df[_labeled_col] == True)
+
+            top = effects_df[_sig_mask].sort_values("abs_effect_size", ascending=False)[_top_cols]
+
+            # Summary
+            print(f"\nSignificant nodes summary:")
+            print(f"  Uncorrected (p<0.05):   {effects_df['significant'].sum()}")
+            for _lc in [c for c in effects_df.columns if c.startswith("sig_fdr_") or c.startswith("sig_perm_")]:
+                print(f"  {_lc}: {effects_df[_lc].sum()}")
+            print(f"  Total in output (any):  {len(top)}")
             print(top.to_string(index=False))
-            top.to_csv(output_dir / "top_temporal_nodes.csv", index=False)
-            print("  + Saved: top_temporal_nodes.csv")
+            top.to_csv(output_dir / "significant_temporal_nodes.csv", index=False, sep=";")
+            print("  + Saved: significant_temporal_nodes.csv")
 
         hub_df = pd.DataFrame()
     else:
@@ -579,6 +680,43 @@ def main() -> None:
         effects_df = compute_intervention_effects(
             trajectory_df, intervention_groups, control_group, n_nodes
         )
+
+        # ── Multiple comparisons correction ──────────────────────────────
+        if not effects_df.empty:
+            print("\n  Apply multiple comparisons correction?")
+            print("    [1] FDR only (Benjamini-Hochberg) — fast, standard")
+            print("    [2] Permutation only (1000x) — slower, model-free")
+            print("    [3] FDR + Permutation — most complete")
+            print("    [0] None — skip (for group comparisons: not needed, SVM/RF handle it)")
+            _mc_choice = input("  > ").strip()
+
+            if _mc_choice in ("1", "3"):
+                from scipy.stats import false_discovery_control
+                p_vals = effects_df["p_value"].values
+                try:
+                    p_fdr = false_discovery_control(p_vals, method="bh")
+                except Exception:
+                    from statsmodels.stats.multitest import multipletests
+                    _, p_fdr, _, _ = multipletests(p_vals, method="fdr_bh")
+                effects_df["p_fdr"] = p_fdr
+                effects_df["significant_fdr"] = p_fdr < 0.05
+                print(f"  ✓ FDR: {effects_df['significant_fdr'].sum()}/{len(effects_df)} significant (q<0.05)")
+
+            if _mc_choice in ("2", "3"):
+                import numpy as _np2
+                from scipy import stats as _stats2
+                print("  Running permutation test (1000x)...")
+                n_perm  = 1000
+                obs_t   = effects_df["cohens_d"].values if "cohens_d" in effects_df.columns else effects_df["effect_size_cohens_d"].values
+                perm_t  = _np2.zeros((n_perm, len(obs_t)))
+                for _p in range(n_perm):
+                    if _p % 100 == 0:
+                        print(f"    {_p}/{n_perm}...", end="\r")
+                    perm_t[_p] = _np2.random.permutation(obs_t)
+                p_perm = _np2.mean(_np2.abs(perm_t) >= _np2.abs(obs_t), axis=0)
+                effects_df["p_perm"] = p_perm
+                effects_df["significant_perm"] = p_perm < 0.05
+                print(f"\n  ✓ Permutation: {effects_df['significant_perm'].sum()}/{len(effects_df)} significant")
         print(f"  + {len(effects_df)} node x metric effects computed")
         effects_df.to_parquet(output_dir / "intervention_effect_sizes.parquet", index=False)
         print("  + Saved: intervention_effect_sizes.parquet")

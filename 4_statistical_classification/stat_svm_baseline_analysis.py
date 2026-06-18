@@ -39,10 +39,89 @@ from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
+# ── Inline group detection ────────────────────────────────────────────────────
+
+_GD_KEYWORDS = {
+    "control":  ["control", "ctrl", "waitlist", "wait", "passive"],
+    "alone":    ["alone", "individual", "solo", "single"],
+    "social":   ["group", "social", "team", "collective"],
+    "short":    ["2w", "short", "2week", "week2", "brief"],
+    "long":     ["4w", "long",  "4week", "week4", "extended"],
+}
+
+def _gd_match(groups, keywords):
+    return [g for g in groups if any(k in str(g).lower() for k in keywords)]
+
+def _gd_try_auto(all_groups, group_counts):
+    ctrl = _gd_match(all_groups, _GD_KEYWORDS["control"])
+    if not ctrl:
+        control = group_counts.idxmin()
+    elif len(ctrl) == 1:
+        control = ctrl[0]
+    else:
+        return None
+    intervention = [g for g in all_groups if g != control]
+    alone  = _gd_match(intervention, _GD_KEYWORDS["alone"])
+    social = _gd_match(intervention, _GD_KEYWORDS["social"])
+    short  = _gd_match(intervention, _GD_KEYWORDS["short"])
+    long_  = _gd_match(intervention, _GD_KEYWORDS["long"])
+    if alone or social or short or long_:
+        return {"all": all_groups, "control": control, "intervention": intervention,
+                "alone": alone, "social": social, "short": short, "long": long_}
+    return None
+
+def _gd_interactive(all_groups):
+    print("\n" + "=" * 60)
+    print("GROUP ASSIGNMENT (interactive)")
+    print("=" * 60)
+    print(f"  Found groups: {all_groups}")
+    print("\n  Which is the CONTROL group?")
+    print(f"    [0] Single-group analysis (no control group)")
+    for i, g in enumerate(all_groups):
+        print(f"    [{i+1}] {g}")
+    while True:
+        raw = input("  > ").strip()
+        if raw == "0":
+            print("  ✓ Single-group analysis selected")
+            return {"all": all_groups, "control": None, "intervention": all_groups,
+                    "alone": [], "social": [], "short": [], "long": [], "single_group": True}
+        if raw.isdigit() and 1 <= int(raw) <= len(all_groups):
+            control = all_groups[int(raw) - 1]; break
+        elif raw in all_groups:
+            control = raw; break
+        print("  Please enter a valid number or group name.")
+    intervention = [g for g in all_groups if g != control]
+    return {"all": all_groups, "control": control, "intervention": intervention,
+            "alone": _gd_match(intervention, _GD_KEYWORDS["alone"]),
+            "social": _gd_match(intervention, _GD_KEYWORDS["social"]),
+            "short":  _gd_match(intervention, _GD_KEYWORDS["short"]),
+            "long":   _gd_match(intervention, _GD_KEYWORDS["long"])}
+
+def _gd_detect_or_ask(df, group_col, config, run_spec_path=None):
+    all_groups   = df[group_col].dropna().unique().tolist()
+    group_counts = df.groupby(group_col)[df.columns[0]].count()
+    if len(all_groups) <= 1:
+        return {"all": all_groups, "control": None, "intervention": all_groups,
+                "alone": [], "social": [], "short": [], "long": [], "single_group": True}
+    if config.get("control_group"):
+        control = config["control_group"]
+        intervention = [g for g in all_groups if g != control]
+        return {"all": all_groups, "control": control, "intervention": intervention,
+                "alone": config.get("alone_groups") or _gd_match(intervention, _GD_KEYWORDS["alone"]),
+                "social": config.get("group_groups") or _gd_match(intervention, _GD_KEYWORDS["social"]),
+                "short":  config.get("short_groups") or _gd_match(intervention, _GD_KEYWORDS["short"]),
+                "long":   config.get("long_groups")  or _gd_match(intervention, _GD_KEYWORDS["long"])}
+    groups = _gd_try_auto(all_groups, group_counts)
+    if groups:
+        print(f"  ✓ Control (auto): {groups['control']}")
+        return groups
+    print(f"\n  ⚠ Could not auto-detect group assignments.")
+    return _gd_interactive(all_groups)
+
+
 warnings.filterwarnings("ignore")
 
 # Local
-from group_detection import detect_or_ask_groups
 
 # ============================================================================
 # CLI
@@ -595,7 +674,10 @@ def main() -> None:
 
     print("\nAuto-detecting groups...")
     run_spec_path = None
-    groups = detect_or_ask_groups(df, group_col, config, run_spec_path)
+    groups = _gd_detect_or_ask(df, group_col, config, run_spec_path)
+    if groups.get("single_group"):
+        print("  ✓ Single-group mode — skipping multi-group classification")
+        sys.exit(0)
     print()
     # ── Slopes ─────────────────────────────────────────────────────────────
     print("Calculating slopes...")

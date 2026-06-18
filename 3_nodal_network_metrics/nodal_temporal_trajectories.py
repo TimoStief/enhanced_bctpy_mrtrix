@@ -36,8 +36,85 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# ── Inline group detection (no external dependency) ───────────────────────────
+
+_GD_KEYWORDS = {
+    "control":  ["control", "ctrl", "waitlist", "wait", "passive"],
+    "alone":    ["alone", "individual", "solo", "single"],
+    "social":   ["group", "social", "team", "collective"],
+    "short":    ["2w", "short", "2week", "week2", "brief"],
+    "long":     ["4w", "long",  "4week", "week4", "extended"],
+}
+
+def _gd_match(groups, keywords):
+    return [g for g in groups if any(k in str(g).lower() for k in keywords)]
+
+def _gd_try_auto(all_groups, group_counts):
+    ctrl = _gd_match(all_groups, _GD_KEYWORDS["control"])
+    if not ctrl:
+        control = group_counts.idxmin()
+    elif len(ctrl) == 1:
+        control = ctrl[0]
+    else:
+        return None
+    intervention = [g for g in all_groups if g != control]
+    alone  = _gd_match(intervention, _GD_KEYWORDS["alone"])
+    social = _gd_match(intervention, _GD_KEYWORDS["social"])
+    short  = _gd_match(intervention, _GD_KEYWORDS["short"])
+    long_  = _gd_match(intervention, _GD_KEYWORDS["long"])
+    if alone or social or short or long_:
+        return {"all": all_groups, "control": control, "intervention": intervention,
+                "alone": alone, "social": social, "short": short, "long": long_}
+    return None
+
+def _gd_interactive(all_groups):
+    print("\n" + "=" * 60)
+    print("GROUP ASSIGNMENT (interactive)")
+    print("=" * 60)
+    print(f"  Found groups: {all_groups}")
+    print("\n  Which is the CONTROL group?")
+    print(f"    [0] Single-group analysis (no control group)")
+    for i, g in enumerate(all_groups):
+        print(f"    [{i+1}] {g}")
+    while True:
+        raw = input("  > ").strip()
+        if raw == "0":
+            print("  ✓ Single-group analysis selected")
+            return {"all": all_groups, "control": None, "intervention": all_groups,
+                    "alone": [], "social": [], "short": [], "long": [], "single_group": True}
+        if raw.isdigit() and 1 <= int(raw) <= len(all_groups):
+            control = all_groups[int(raw) - 1]; break
+        elif raw in all_groups:
+            control = raw; break
+        print("  Please enter a valid number or group name.")
+    intervention = [g for g in all_groups if g != control]
+    alone  = _gd_match(intervention, _GD_KEYWORDS["alone"])
+    social = _gd_match(intervention, _GD_KEYWORDS["social"])
+    short  = _gd_match(intervention, _GD_KEYWORDS["short"])
+    long_  = _gd_match(intervention, _GD_KEYWORDS["long"])
+    return {"all": all_groups, "control": control, "intervention": intervention,
+            "alone": alone, "social": social, "short": short, "long": long_}
+
+def _gd_detect_or_ask(df, group_col, config, run_spec_path=None):
+    all_groups   = df[group_col].dropna().unique().tolist()
+    group_counts = df.groupby(group_col)[df.columns[0]].count()
+    if config.get("control_group"):
+        control      = config["control_group"]
+        intervention = [g for g in all_groups if g != control]
+        return {"all": all_groups, "control": control, "intervention": intervention,
+                "alone": config.get("alone_groups") or _gd_match(intervention, _GD_KEYWORDS["alone"]),
+                "social": config.get("group_groups") or _gd_match(intervention, _GD_KEYWORDS["social"]),
+                "short":  config.get("short_groups") or _gd_match(intervention, _GD_KEYWORDS["short"]),
+                "long":   config.get("long_groups")  or _gd_match(intervention, _GD_KEYWORDS["long"])}
+    groups = _gd_try_auto(all_groups, group_counts)
+    if groups:
+        print(f"  ✓ Control (auto): {groups['control']}, Intervention: {groups['intervention']}")
+        return groups
+    print(f"\n  ⚠ Could not auto-detect group assignments.")
+    return _gd_interactive(all_groups)
+
+
 # Local
-from group_detection import detect_or_ask_groups
 
 # ============================================================================
 # CLI / run_spec LOADING
@@ -298,22 +375,25 @@ def make_plots(effects_df, hub_df, trajectory_df, plot_dir):
         print("  + regional_effect_heatmap.png")
 
     # 2. Per-metric node effect bars
-    for metric in effects_df["metric"].unique():
-        m_data = effects_df[effects_df["metric"] == metric].sort_values("effect_size_cohens_d")
-        colors = ["tomato" if x > 0 else "steelblue"
-                  for x in m_data["effect_size_cohens_d"].values]
-        fig, ax = plt.subplots(figsize=(10, max(6, len(m_data) // 8)))
-        ax.barh(range(len(m_data)), m_data["effect_size_cohens_d"].values,
-                color=colors, alpha=0.7)
-        ax.set_yticks(range(len(m_data)))
-        ax.set_yticklabels(m_data["node"].values, fontsize=6)
-        ax.axvline(0, color="black", linewidth=0.5)
-        ax.set_xlabel("Cohen's d")
-        ax.set_title(f"Intervention Effect: {metric}", fontweight="bold")
-        plt.tight_layout()
-        plt.savefig(plot_dir / f"node_effects_{metric}.png", dpi=150)
-        plt.close()
-        print(f"  + node_effects_{metric}.png")
+    if effects_df.empty or "metric" not in effects_df.columns:
+        print("  ⚠ No effect sizes to plot (skipping per-metric bars)")
+    else:
+     for metric in effects_df["metric"].unique():
+          m_data = effects_df[effects_df["metric"] == metric].sort_values("effect_size_cohens_d")
+          colors = ["tomato" if x > 0 else "steelblue"
+                    for x in m_data["effect_size_cohens_d"].values]
+          fig, ax = plt.subplots(figsize=(10, max(6, len(m_data) // 8)))
+          ax.barh(range(len(m_data)), m_data["effect_size_cohens_d"].values,
+                  color=colors, alpha=0.7)
+          ax.set_yticks(range(len(m_data)))
+          ax.set_yticklabels(m_data["node"].values, fontsize=6)
+          ax.axvline(0, color="black", linewidth=0.5)
+          ax.set_xlabel("Cohen's d")
+          ax.set_title(f"Intervention Effect: {metric}", fontweight="bold")
+          plt.tight_layout()
+          plt.savefig(plot_dir / f"node_effects_{metric}.png", dpi=150)
+          plt.close()
+          print(f"  + node_effects_{metric}.png")
 
     # 3. Hub type response distributions
     if not hub_df.empty:
@@ -408,7 +488,16 @@ def main() -> None:
         intervention_groups = all_groups
         control_group       = all_groups[0] if all_groups else None
     else:
-        groups = detect_or_ask_groups(node_df, group_col, config, run_spec_path)
+        all_groups = node_df[group_col].dropna().unique().tolist() if group_col else []
+    if len(all_groups) <= 1 or args.single_group:
+        # Auto single-group or flag set
+        groups = {"control": None, "intervention": all_groups, "all": all_groups,
+                  "alone": [], "social": [], "short": [], "long": []}
+        args.single_group = True
+    else:
+        groups = _gd_detect_or_ask(node_df, group_col, config, run_spec_path)
+    if groups.get("single_group"):
+        args.single_group = True
         intervention_groups = groups["intervention"]
         control_group       = groups["control"]
     print()
@@ -425,28 +514,45 @@ def main() -> None:
     # Intervention effects / Single-group temporal effects
     if single_group_mode:
         print("\nComputing temporal effect sizes (single-group)...")
-        # In single-group mode: effect size = slope significance across subjects
         from scipy import stats as _stats
         records = []
-        for metric in trajectory_df["metric"].unique():
+        # Compute per-subject slopes for significance testing
+        subject_col = "subject"
+        # Build node→label lookup from node_df
+        label_lookup = {}
+        if "label" in node_df.columns:
+            for node_id, grp in node_df.groupby("node"):
+                label_lookup[node_id] = grp["label"].iloc[0]
+        for metric in metric_cols:
             for node in range(1, n_nodes + 1):
-                node_data = trajectory_df[
-                    (trajectory_df["node"] == node) &
-                    (trajectory_df["metric"] == metric)
-                ]["slope"].dropna().values
-                if len(node_data) >= 3:
-                    t_stat, p_val = _stats.ttest_1samp(node_data, 0)
-                    cohens_d = node_data.mean() / (node_data.std() + 1e-10)
+                node_data = node_df[node_df["node"] == node]
+                subject_slopes = []
+                for subj, sdata in node_data.groupby(subject_col):
+                    sessions = sdata[session_col].values.astype(float)
+                    values   = pd.to_numeric(sdata[metric], errors="coerce").values
+                    valid    = ~np.isnan(values)
+                    if valid.sum() >= 2:
+                        try:
+                            slope = np.polyfit(sessions[valid], values[valid], 1)[0]
+                            subject_slopes.append(slope)
+                        except Exception:
+                            pass
+                if len(subject_slopes) >= 2:
+                    slopes_arr = np.array(subject_slopes)
+                    t_stat, p_val = _stats.ttest_1samp(slopes_arr, 0)
+                    cohens_d = slopes_arr.mean() / (slopes_arr.std() + 1e-10)
                     records.append({
-                        "node": node, "metric": metric,
-                        "mean_slope": float(node_data.mean()),
-                        "std_slope":  float(node_data.std()),
-                        "t_statistic": float(t_stat),
-                        "p_value":    float(p_val),
+                        "node":                node,
+                        "label":               label_lookup.get(node, f"Node_{node}"),
+                        "metric":              metric,
+                        "mean_slope":          float(slopes_arr.mean()),
+                        "std_slope":           float(slopes_arr.std()),
+                        "t_statistic":         float(t_stat),
+                        "p_value":             float(p_val),
                         "effect_size_cohens_d": float(cohens_d),
-                        "abs_effect_size": float(abs(cohens_d)),
-                        "significant": bool(p_val < 0.05),
-                        "n_subjects": len(node_data),
+                        "abs_effect_size":     float(abs(cohens_d)),
+                        "significant":         bool(p_val < 0.05),
+                        "n_subjects":          len(subject_slopes),
                     })
         effects_df = pd.DataFrame(records)
         print(f"  + {len(effects_df)} node x metric temporal effects computed")

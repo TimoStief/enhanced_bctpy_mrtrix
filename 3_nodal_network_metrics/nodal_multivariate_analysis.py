@@ -44,8 +44,85 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# ── Inline group detection (no external dependency) ───────────────────────────
+
+_GD_KEYWORDS = {
+    "control":  ["control", "ctrl", "waitlist", "wait", "passive"],
+    "alone":    ["alone", "individual", "solo", "single"],
+    "social":   ["group", "social", "team", "collective"],
+    "short":    ["2w", "short", "2week", "week2", "brief"],
+    "long":     ["4w", "long",  "4week", "week4", "extended"],
+}
+
+def _gd_match(groups, keywords):
+    return [g for g in groups if any(k in str(g).lower() for k in keywords)]
+
+def _gd_try_auto(all_groups, group_counts):
+    ctrl = _gd_match(all_groups, _GD_KEYWORDS["control"])
+    if not ctrl:
+        control = group_counts.idxmin()
+    elif len(ctrl) == 1:
+        control = ctrl[0]
+    else:
+        return None
+    intervention = [g for g in all_groups if g != control]
+    alone  = _gd_match(intervention, _GD_KEYWORDS["alone"])
+    social = _gd_match(intervention, _GD_KEYWORDS["social"])
+    short  = _gd_match(intervention, _GD_KEYWORDS["short"])
+    long_  = _gd_match(intervention, _GD_KEYWORDS["long"])
+    if alone or social or short or long_:
+        return {"all": all_groups, "control": control, "intervention": intervention,
+                "alone": alone, "social": social, "short": short, "long": long_}
+    return None
+
+def _gd_interactive(all_groups):
+    print("\n" + "=" * 60)
+    print("GROUP ASSIGNMENT (interactive)")
+    print("=" * 60)
+    print(f"  Found groups: {all_groups}")
+    print("\n  Which is the CONTROL group?")
+    print(f"    [0] Single-group analysis (no control group)")
+    for i, g in enumerate(all_groups):
+        print(f"    [{i+1}] {g}")
+    while True:
+        raw = input("  > ").strip()
+        if raw == "0":
+            print("  ✓ Single-group analysis selected")
+            return {"all": all_groups, "control": None, "intervention": all_groups,
+                    "alone": [], "social": [], "short": [], "long": [], "single_group": True}
+        if raw.isdigit() and 1 <= int(raw) <= len(all_groups):
+            control = all_groups[int(raw) - 1]; break
+        elif raw in all_groups:
+            control = raw; break
+        print("  Please enter a valid number or group name.")
+    intervention = [g for g in all_groups if g != control]
+    alone  = _gd_match(intervention, _GD_KEYWORDS["alone"])
+    social = _gd_match(intervention, _GD_KEYWORDS["social"])
+    short  = _gd_match(intervention, _GD_KEYWORDS["short"])
+    long_  = _gd_match(intervention, _GD_KEYWORDS["long"])
+    return {"all": all_groups, "control": control, "intervention": intervention,
+            "alone": alone, "social": social, "short": short, "long": long_}
+
+def _gd_detect_or_ask(df, group_col, config, run_spec_path=None):
+    all_groups   = df[group_col].dropna().unique().tolist()
+    group_counts = df.groupby(group_col)[df.columns[0]].count()
+    if config.get("control_group"):
+        control      = config["control_group"]
+        intervention = [g for g in all_groups if g != control]
+        return {"all": all_groups, "control": control, "intervention": intervention,
+                "alone": config.get("alone_groups") or _gd_match(intervention, _GD_KEYWORDS["alone"]),
+                "social": config.get("group_groups") or _gd_match(intervention, _GD_KEYWORDS["social"]),
+                "short":  config.get("short_groups") or _gd_match(intervention, _GD_KEYWORDS["short"]),
+                "long":   config.get("long_groups")  or _gd_match(intervention, _GD_KEYWORDS["long"])}
+    groups = _gd_try_auto(all_groups, group_counts)
+    if groups:
+        print(f"  ✓ Control (auto): {groups['control']}, Intervention: {groups['intervention']}")
+        return groups
+    print(f"\n  ⚠ Could not auto-detect group assignments.")
+    return _gd_interactive(all_groups)
+
+
 # Local
-from group_detection import detect_or_ask_groups
 
 
 # ============================================================================
@@ -75,6 +152,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--group-groups",      nargs="+", help="Group intervention labels (auto-detected if omitted)")
     parser.add_argument("--short-groups",      nargs="+", help="Short duration labels (auto-detected if omitted)")
     parser.add_argument("--long-groups",       nargs="+", help="Long duration labels (auto-detected if omitted)")
+    parser.add_argument("--single-group",      action="store_true", help="Single-group mode (no control group needed)")
     return parser.parse_args()
 
 
@@ -251,7 +329,7 @@ def run_five_group_anova(node_df, metric_cols, group_col, groups, n_nodes):
                 ss_total   = sum(np.sum((g - grand_mean) ** 2) for g in groups_data)
                 eta2       = ss_between / ss_total if ss_total > 0 else 0
                 group_means = {f"mean_{g}": np.mean(d) for g, d in zip(all_groups, groups_data)}
-                records.append({"node": node, "metric": metric, "f_statistic": f_stat,
+                records.append({"node": node, "label": label_lookup.get(node, f"Node_{node}"), "metric": metric, "f_statistic": f_stat,
                                  "p_value": p_val, "eta_squared": eta2,
                                  "significant": p_val < 0.05, **group_means})
             except Exception:
@@ -276,7 +354,7 @@ def run_ttest_analysis(node_df, metric_cols, group_col, group_a, group_b,
                 pooled_std     = np.sqrt((a_data.std() ** 2 + b_data.std() ** 2) / 2)
                 cohens_d       = (a_data.mean() - b_data.mean()) / pooled_std if pooled_std > 0 else 0
                 records.append({
-                    "node": node, "metric": metric,
+                    "node": node, "label": label_lookup.get(node, f"Node_{node}"), "metric": metric,
                     "t_statistic": t_stat, "p_value": p_val,
                     "cohens_d": cohens_d, "abs_cohens_d": abs(cohens_d),
                     f"mean_{label_a}": a_data.mean(),
@@ -305,7 +383,7 @@ def run_age_correlations(node_df, metric_cols, age_col, n_nodes):
                 r_p, p_p = pearsonr(ages, values)
                 r_s, p_s = spearmanr(ages, values)
                 records.append({
-                    "node": node, "metric": metric,
+                    "node": node, "label": label_lookup.get(node, f"Node_{node}"), "metric": metric,
                     "r_pearson": r_p,  "p_pearson": p_p,
                     "r_spearman": r_s, "p_spearman": p_s,
                     "abs_r_pearson": abs(r_p),
@@ -481,7 +559,26 @@ def main() -> None:
     metric_cols = cols["metric_cols"]
     n_nodes = detect_n_nodes(node_df)
     run_spec_path = Path(args.run_spec) if args.run_spec else None
-    groups = detect_or_ask_groups(node_df, group_col, config, run_spec_path)
+    all_groups = node_df[group_col].dropna().unique().tolist() if group_col else []
+    single_group_mode = args.single_group or len(all_groups) <= 1
+    if single_group_mode:
+        print(f"  ✓ Single-group mode (groups: {all_groups})")
+        groups = {
+            "control": None, "intervention": all_groups,
+            "alone": [], "social": [], "short": [], "long": [],
+            "all": all_groups,
+        }
+    else:
+        all_groups = node_df[group_col].dropna().unique().tolist() if group_col else []
+    if len(all_groups) <= 1 or args.single_group:
+        # Auto single-group or flag set
+        groups = {"control": None, "intervention": all_groups, "all": all_groups,
+                  "alone": [], "social": [], "short": [], "long": []}
+        args.single_group = True
+    else:
+        groups = _gd_detect_or_ask(node_df, group_col, config, run_spec_path)
+    if groups.get("single_group"):
+        args.single_group = True
     node_df = normalize_sex(node_df, sex_col)
     print()
 
@@ -504,10 +601,14 @@ def main() -> None:
     print("=" * 70)
     print("ANALYSIS 2: SOCIAL EFFECTS (ALONE VS GROUP)")
     print("=" * 70)
-    results["social"] = run_ttest_analysis(
-        node_df, metric_cols, group_col,
-        groups["alone"], groups["social"], "alone", "group", n_nodes
-    )
+    if single_group_mode or not groups["alone"] or not groups["social"]:
+        print("  ⚠ Skipped (single-group mode or no alone/social groups)")
+        results["social"] = pd.DataFrame()
+    else:
+        results["social"] = run_ttest_analysis(
+            node_df, metric_cols, group_col,
+            groups["alone"], groups["social"], "alone", "group", n_nodes
+        )
     df = results["social"]
     print(f"Analyzed {len(df)} node-metric combinations")
     if len(df) > 0:
@@ -520,10 +621,14 @@ def main() -> None:
     print("=" * 70)
     print("ANALYSIS 3: DURATION EFFECTS (SHORT VS LONG)")
     print("=" * 70)
-    results["duration"] = run_ttest_analysis(
-        node_df, metric_cols, group_col,
-        groups["short"], groups["long"], "short", "long", n_nodes
-    )
+    if single_group_mode or not groups["short"] or not groups["long"]:
+        print("  ⚠ Skipped (single-group mode or no short/long groups)")
+        results["duration"] = pd.DataFrame()
+    else:
+        results["duration"] = run_ttest_analysis(
+            node_df, metric_cols, group_col,
+            groups["short"], groups["long"], "short", "long", n_nodes
+        )
     df = results["duration"]
     print(f"Analyzed {len(df)} node-metric combinations")
     if len(df) > 0:
@@ -536,10 +641,14 @@ def main() -> None:
     print("=" * 70)
     print("ANALYSIS 4: INTERVENTION VS CONTROL")
     print("=" * 70)
-    results["binary"] = run_ttest_analysis(
-        node_df, metric_cols, group_col,
-        groups["intervention"], [groups["control"]], "intervention", "control", n_nodes
-    )
+    if single_group_mode or not groups["control"]:
+        print("  ⚠ Skipped (single-group mode or no control group)")
+        results["binary"] = pd.DataFrame()
+    else:
+        results["binary"] = run_ttest_analysis(
+            node_df, metric_cols, group_col,
+            groups["intervention"], [groups["control"]], "intervention", "control", n_nodes
+        )
     df = results["binary"]
     print(f"Analyzed {len(df)} node-metric combinations")
     if len(df) > 0:

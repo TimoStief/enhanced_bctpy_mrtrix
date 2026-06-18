@@ -19,7 +19,6 @@ VERSION: 1.0 (Auto-detection, run_spec driven)
 
 from __future__ import annotations
 
-# Atlas labels - embedded from atlas_labels.py (1_utilities/)
 try:
     from atlas_labels import detect_atlas as _detect_atlas_labels, get_label as _get_label
     _HAS_ATLAS_LABELS = True
@@ -340,15 +339,12 @@ def detect_n_nodes(data_dir: Path, fmt: str) -> int:
 
 def detect_atlas_name(data_dir: Path) -> str:
     """Detect atlas from folder/filenames using atlas_labels module."""
-    # Collect sample filenames for detection
-    sample_files = [f.name for f in list(data_dir.rglob("*.npy"))[:10] +
-                    list(data_dir.rglob("*.mat"))[:10]]
+    sample_files = [f.name for f in list(data_dir.rglob("*.npy"))[:10]]
     if _HAS_ATLAS_LABELS:
         key = _detect_atlas_labels(data_dir, sample_files)
         if key != "unknown":
             print(f"  ✓ Atlas detected: {key} (from atlas_labels)")
             return key
-    # Fallback: basic keyword matching
     known = ["brainnectome", "brodmann", "aal", "hcp-mmp", "hcpex", "julichbrain",
              "cerebra", "freesurfer", "schaefer", "destrieux", "desikan", "hcp",
              "cerebellum", "thomas", "kleist", "campbell", "cha", "atag"]
@@ -387,31 +383,31 @@ def _load_matrix_raw(filepath: Path, fmt: str) -> np.ndarray | None:
 
 
 def find_matrix_file(data_dir: Path, subject: str, session: str, fmt: str) -> Path | None:
-    """
-    Search data_dir recursively for a file matching subject and session.
-    Uses string matching instead of glob patterns for reliability on Windows.
-    """
     subj_clean    = subject.replace("sub-", "")
     subj_prefixed = f"sub-{subj_clean}"
     ses_clean     = str(session).replace("ses-", "")
-    ses_label     = f"ses-{ses_clean}"
 
-    # Search all files recursively and filter by subject + session
-    all_files = list(data_dir.rglob(f"*.{fmt}"))
-    for f in all_files:
-        name = f.name
-        has_subject = (subj_clean in name) or (subj_prefixed in name)
-        has_session = (ses_label in name) or (f"_{ses_clean}_" in name)
-        if has_subject and has_session:
-            return f
+    patterns = [
+        f"*{subj_clean}*ses*{ses_clean}*.{fmt}",
+        f"*{subj_prefixed}*ses*{ses_clean}*.{fmt}",
+        f"ses-{ses_clean}/*{subj_clean}*.{fmt}",
+        f"ses-{ses_clean}/*{subj_prefixed}*.{fmt}",
+        f"*{subj_clean}*{ses_clean}*.{fmt}",
+        f"**/*{subj_clean}*{ses_clean}*.{fmt}",
+    ]
+    for pattern in patterns:
+        matches = list(data_dir.glob(pattern))
+        if matches:
+            return matches[0]
 
-    # Fallback: mat connectivity files
     if fmt == "mat":
-        for f in data_dir.rglob("*.connectivity.mat"):
-            name = f.name
-            if (subj_clean in name or subj_prefixed in name) and ses_label in name:
-                return f
-
+        for pattern in [
+            f"*{subj_clean}*ses*{ses_clean}*.connectivity.mat",
+            f"**/*{subj_clean}*{ses_clean}*.connectivity.mat",
+        ]:
+            matches = list(data_dir.glob(pattern))
+            if matches:
+                return matches[0]
     return None
 
 

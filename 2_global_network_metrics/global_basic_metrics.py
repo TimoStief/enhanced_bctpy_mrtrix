@@ -224,6 +224,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--normalize", default=None,
                         choices=["log", "max", "binary", "none", "auto"],
                         help="Matrix normalization: log, max, binary, none, auto (default: auto-detect and ask)")
+    parser.add_argument("--metrics", nargs="+", default=None,
+                        metavar="METRIC",
+                        help="Metrics to compute (default: all). "
+                             "Available: density, path_length, global_efficiency, clustering_coef, transitivity, modularity, betweenness, local_efficiency, participation_coef, small_worldness")
     parser.add_argument("--binarize", action="store_true", default=None,
                         help="Binarize connectivity matrices before analysis")
     return parser.parse_args()
@@ -469,7 +473,7 @@ def load_connectivity_matrix(
 # METRICS
 # ============================================================================
 
-def compute_global_metrics(A: np.ndarray, binarize: bool = False) -> dict:
+def compute_global_metrics(A: np.ndarray, binarize: bool = False, requested_metrics: list | None = None) -> dict:
     """Compute global network metrics from connectivity matrix."""
     nan_result = {
         "density": np.nan, "path_length": np.nan, "global_efficiency": np.nan,
@@ -731,7 +735,8 @@ def main() -> None:
             continue
         A = normalize_matrix(A, normalize)
         print(f"  → {subject} ses-{session} computing density, clustering, betweenness...  ", end="\n", flush=True)
-        metrics = compute_global_metrics(A, binarize=binarize)
+        _req_metrics = config.get("metrics")
+        metrics = compute_global_metrics(A, binarize=binarize, requested_metrics=_req_metrics)
         print(f"  ✓ {subject} ses-{session} done                                             ", end="\n", flush=True)
 
         record = {"subject": subject, "session": session, **metrics}

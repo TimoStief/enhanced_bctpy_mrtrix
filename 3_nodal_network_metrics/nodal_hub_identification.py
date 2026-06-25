@@ -226,6 +226,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--normalize", default=None,
                         choices=["log", "max", "binary", "none", "auto"],
                         help="Matrix normalization: log, max, binary, none, auto (default: auto-detect and ask)")
+    parser.add_argument("--metrics", nargs="+", default=None,
+                        metavar="METRIC",
+                        help="Metrics to compute (default: all). "
+                             "Available: degree, strength, betweenness, clustering, local_efficiency, participation_coef, within_module_zscore")
     parser.add_argument("--binarize", action="store_true", default=None,
                         help="Binarize connectivity matrices before analysis")
     return parser.parse_args()
@@ -450,7 +454,7 @@ def classify_hubs(participation_coef: np.ndarray,
     return np.array(hub_types)
 
 
-def compute_node_metrics(A: np.ndarray, n_nodes: int, binarize: bool = False) -> dict:
+def compute_node_metrics(A: np.ndarray, n_nodes: int, binarize: bool = False, requested_metrics: list | None = None) -> dict:
     """
     Compute comprehensive node-level metrics for a connectivity matrix.
 

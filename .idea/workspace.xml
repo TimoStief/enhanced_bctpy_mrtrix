@@ -4,8 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f7e9a91e-fb97-4b20-8b1d-bb3cedc819f7" name="Changes" comment="fdr and permutations for single group analysis">
+    <list default="true" id="f7e9a91e-fb97-4b20-8b1d-bb3cedc819f7" name="Changes" comment="single metric computation option">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/2_global_network_metrics/global_basic_metrics.py" beforeDir="false" afterPath="$PROJECT_DIR$/2_global_network_metrics/global_basic_metrics.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_hub_identification.py" beforeDir="false" afterPath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_hub_identification.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -490,7 +492,23 @@
       <option name="project" value="LOCAL" />
       <updated>1781787350946</updated>
     </task>
-    <option name="localTasksCounter" value="46" />
+    <task id="LOCAL-00046" summary="fdr and permutations for single group analysis">
+      <option name="closed" value="true" />
+      <created>1782372466300</created>
+      <option name="number" value="00046" />
+      <option name="presentableId" value="LOCAL-00046" />
+      <option name="project" value="LOCAL" />
+      <updated>1782372466300</updated>
+    </task>
+    <task id="LOCAL-00047" summary="single metric computation option">
+      <option name="closed" value="true" />
+      <created>1782372515700</created>
+      <option name="number" value="00047" />
+      <option name="presentableId" value="LOCAL-00047" />
+      <option name="project" value="LOCAL" />
+      <updated>1782372515700</updated>
+    </task>
+    <option name="localTasksCounter" value="48" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -508,7 +526,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="codecov actual 80%+ preflight and global_basic" />
     <MESSAGE value="nodal_hub_identification auto-detection first try" />
     <MESSAGE value="nodal_temporal_trajectories auto-detection first try" />
     <MESSAGE value="nodal_multivariate_analysis auto-detection first try" />
@@ -533,7 +550,8 @@
     <MESSAGE value="single group analysis option" />
     <MESSAGE value="labeling fixed" />
     <MESSAGE value="fdr and permutations for single group analysis" />
-    <option name="LAST_COMMIT_MESSAGE" value="fdr and permutations for single group analysis" />
+    <MESSAGE value="single metric computation option" />
+    <option name="LAST_COMMIT_MESSAGE" value="single metric computation option" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/enhanced_bctpy_mrtrix$preflight_check.coverage" NAME="preflight_check Coverage Results" MODIFIED="1770718692255" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/0_installation" />

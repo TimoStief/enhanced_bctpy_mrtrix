@@ -230,6 +230,10 @@ def parse_args() -> argparse.Namespace:
                         metavar="METRIC",
                         help="Metrics to compute (default: all). "
                              "Available: degree, strength, betweenness, clustering, local_efficiency, participation_coef, within_module_zscore")
+    parser.add_argument("--pilot", nargs="?", const="first", default=None,
+                        metavar="first|random",
+                        help="Pilot mode: process only 1 subject. "
+                             "'first' (default) or 'random'")
     parser.add_argument("--binarize", action="store_true", default=None,
                         help="Binarize connectivity matrices before analysis")
     return parser.parse_args()

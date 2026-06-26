@@ -86,7 +86,7 @@ def detect_matrix_type(A: np.ndarray) -> dict:
     elif max_val > 1000:
         mat_type = "fiber_counts"
         confidence = "high"
-        recommendation = "log"
+        recommendation = "log_individual"  # log for group, log_individual for single-group
     elif max_val > 1:
         mat_type = "weighted_unnormalized"
         confidence = "medium"
@@ -108,15 +108,13 @@ def detect_matrix_type(A: np.ndarray) -> dict:
 def print_matrix_type_help():
     """Print help for matrix types."""
     print("  ── Matrix type guide ──────────────────────────────────────────")
-    print("  [1] fiber_counts   Raw tractography streamline counts (max >> 1)")
-    print("                     e.g. MRtrix, DSI Studio count matrices")
-    print("                     → log-normalization recommended")
-    print("  [2] weighted       FA-weighted or NOS-normalized (max ~0-1)")
-    print("                     → no normalization needed")
-    print("  [3] binary         Binary connectivity (0 or 1 only)")
-    print("                     → binarize recommended")
-    print("  [4] log            Already log-normalized")
-    print("                     → no normalization needed")
+    print("  [1] log             log1p(A)/global_max  — fiber counts, group comparisons")
+    print("  [2] log_individual  log1p(A)/own_max     — fiber counts, single-group/longitudinal ★")
+    print("  [3] max             A/global_max         — weighted, group comparisons")
+    print("  [4] max_individual  A/own_max            — weighted, single-group/longitudinal ★")
+    print("  [5] binary          0/1 only             — topology, no weights")
+    print("  [6] none            no normalization     — already normalized (FA-weighted)")
+    print("  ★ recommended for single-group / longitudinal studies")
     print("  ───────────────────────────────────────────────────────────────")
 
 
@@ -177,19 +175,22 @@ def ask_normalize(data_dir: Path, fmt: str, n_nodes: int,
     # Ask user
     print_matrix_type_help()
     rec_map = {
-        "fiber_counts": "1", "weighted_normalized": "2",
-        "binary": "3", "log": "4", "weighted_unnormalized": "2"
+        "fiber_counts":         "2",  # log_individual
+        "weighted_normalized":  "6",  # none
+        "weighted_unnormalized":"4",  # max_individual
+        "binary":               "5",  # binary
+        "log":                  "6",  # none (already log)
     }
     rec_num = rec_map.get(info["type"], "1")
     rec_label = info["recommendation"]
 
-    print(f"\n  Enter choice [1-4] or press Enter to use recommendation [{rec_num} = {rec_label}]: ", end="", flush=True)
+    print(f"\n  Enter choice [1-6] or press Enter to use recommendation [{rec_num} = {rec_label}]: ", end="", flush=True)
     choice = input().strip()
 
     if not choice:
         choice = rec_num
 
-    mapping = {"1": "log", "2": "none", "3": "binary", "4": "none"}
+    mapping = {"1": "log", "2": "log_individual", "3": "max", "4": "max_individual", "5": "binary", "6": "none"}
     result = mapping.get(choice, rec_label)
     print(f"  ✓ Using normalization: {result.upper()}")
     print("=" * 70)
@@ -197,14 +198,35 @@ def ask_normalize(data_dir: Path, fmt: str, n_nodes: int,
 
 
 def normalize_matrix(A: np.ndarray, normalize: str) -> np.ndarray:
-    """Normalize connectivity matrix."""
+    """
+    Normalize connectivity matrix.
+
+    Options:
+      log            : log1p(A) / global_max  — for fiber counts, group comparisons
+      log_individual : log1p(A) / own_max     — for single-group, longitudinal (recommended for Laufstudie)
+      max            : A / global_max         — linear scaling, group comparisons
+      max_individual : A / own_max            — linear scaling, single-group, longitudinal
+      binary         : 0/1 thresholding       — topology only, no weights
+      none           : no normalization       — already normalized (e.g. FA-weighted)
+    """
     if normalize == "log":
         A_norm = np.log1p(A)
         max_val = A_norm.max()
         if max_val > 0:
             A_norm = A_norm / max_val
         return A_norm
+    elif normalize == "log_individual":
+        # Recommended for single-group / longitudinal: each matrix normalized by its own max
+        A_norm = np.log1p(A)
+        max_val = A_norm.max()
+        if max_val > 0:
+            A_norm = A_norm / max_val
+        return A_norm  # same as log but explicit: each call normalizes independently
     elif normalize == "max":
+        max_val = A.max()
+        return A / max_val if max_val > 0 else A
+    elif normalize == "max_individual":
+        # Recommended for single-group / longitudinal: each matrix normalized by its own max
         max_val = A.max()
         return A / max_val if max_val > 0 else A
     elif normalize == "binary":
@@ -222,7 +244,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--metadata", help="Participant metadata file (CSV or TSV)")
     parser.add_argument("--output-dir", help="Output directory")
     parser.add_argument("--normalize", default=None,
-                        choices=["log", "max", "binary", "none", "auto"],
+                        choices=["log", "log_individual", "max", "max_individual", "binary", "none", "auto"],
                         help="Matrix normalization: log, max, binary, none, auto (default: auto-detect and ask)")
     parser.add_argument("--metrics", nargs="+", default=None,
                         metavar="METRIC",
@@ -267,6 +289,10 @@ def load_config(args: argparse.Namespace) -> dict:
         config["output_dir"] = args.output_dir
     if args.binarize is not None:
         config["binarize"] = args.binarize
+    if hasattr(args, "pilot") and args.pilot is not None:
+        config["pilot"] = args.pilot
+    if hasattr(args, "metrics") and args.metrics is not None:
+        config["metrics"] = args.metrics
 
     # Validate required fields
     missing = [k for k in ("data_dir", "metadata_file", "output_dir") if not config.get(k)]
@@ -621,7 +647,7 @@ def make_plots(results_df: pd.DataFrame, umap_df: pd.DataFrame, trajectory_df: p
                 ax.set_title(metric.replace("_", " ").title())
                 ax.tick_params(axis="x", rotation=30)
             plt.tight_layout()
-            plt.savefig(plot_dir / "metrics_by_group.png", dpi=150)
+            plt.savefig(plot_dir / (_pilot_prefix + "metrics_by_group.png"), dpi=150)
             plt.close()
             print("  ✓ metrics_by_group.png")
 
@@ -643,7 +669,7 @@ def make_plots(results_df: pd.DataFrame, umap_df: pd.DataFrame, trajectory_df: p
         ax.set_xlabel("UMAP 1"); ax.set_ylabel("UMAP 2"); ax.set_zlabel("UMAP 3")
         ax.set_title("UMAP 3D — Global Metrics")
         plt.tight_layout()
-        plt.savefig(plot_dir / "umap_3d.png", dpi=150)
+        plt.savefig(plot_dir / (_pilot_prefix + "umap_3d.png"), dpi=150)
         plt.close()
         print("  ✓ umap_3d.png")
 
@@ -667,7 +693,7 @@ def make_plots(results_df: pd.DataFrame, umap_df: pd.DataFrame, trajectory_df: p
         ax.set_ylabel("Late Change (Sess 2→3)")
         ax.set_title("Trajectory Pattern")
         plt.tight_layout()
-        plt.savefig(plot_dir / "trajectory_scatter.png", dpi=150)
+        plt.savefig(plot_dir / (_pilot_prefix + "trajectory_scatter.png"), dpi=150)
         plt.close()
         print("  ✓ trajectory_scatter.png")
 
@@ -727,6 +753,15 @@ def main() -> None:
     print("Computing global metrics...")
     results = []
 
+    _pilot_prefix = ""
+    if config.get("pilot"):
+        _subj_col = next((c for c in metadata.columns if c.lower() in ["participant_id","subject"]), metadata.columns[0])
+        _first_subj = metadata[_subj_col].iloc[0] if config["pilot"] != "random" else metadata[_subj_col].sample(1).iloc[0]
+        metadata = metadata[metadata[_subj_col] == _first_subj].reset_index(drop=True)
+        print(f"  ⚠ PILOT MODE: processing subject: {_first_subj} ({len(metadata)} sessions)")
+        print("  ⚠ Output files prefixed with 'pilot_'")
+        _pilot_prefix = "pilot_"
+
     _total_s = len(metadata)
     for _i_s, (_, row) in enumerate(metadata.iterrows()):
         _progress(_i_s + 1, _total_s, f"Processing {row[subject_col]} ses-{row[session_col]}")
@@ -759,8 +794,8 @@ def main() -> None:
     results_df = pd.DataFrame(results)
 
     # ── Save metrics ───────────────────────────────────────────────────────
-    results_df.to_parquet(output_dir / "global_metrics.parquet", index=False)
-    results_df.to_csv(output_dir / "global_metrics.csv", index=False)
+    results_df.to_parquet(output_dir / (_pilot_prefix + "global_metrics.parquet"), index=False)
+    results_df.to_csv(output_dir / (_pilot_prefix + "global_metrics.csv"), index=False)
     print(f"✓ Saved: global_metrics.parquet + .csv")
 
     # ── Summary stats ──────────────────────────────────────────────────────
@@ -782,20 +817,20 @@ def main() -> None:
     # Summary per session
     summary_session = results_df.groupby("session")[metric_cols].agg(["mean", "std", "min", "max"])
     summary_session.columns = ["_".join(c) for c in summary_session.columns]
-    summary_session.to_csv(output_dir / "global_metrics_summary_by_session.csv")
+    summary_session.to_csv(output_dir / (_pilot_prefix + "global_metrics_summary_by_session.csv"))
     print("✓ Saved: global_metrics_summary_by_session.csv")
 
     # Summary per group (if available)
     if group_col and group_col in results_df.columns:
         summary_group = results_df.groupby(group_col)[metric_cols].agg(["mean", "std", "min", "max"])
         summary_group.columns = ["_".join(c) for c in summary_group.columns]
-        summary_group.to_csv(output_dir / "global_metrics_summary_by_group.csv")
+        summary_group.to_csv(output_dir / (_pilot_prefix + "global_metrics_summary_by_group.csv"))
         print("✓ Saved: global_metrics_summary_by_group.csv")
 
         # Summary per group x session
         summary_group_session = results_df.groupby([group_col, "session"])[metric_cols].agg(["mean", "std"])
         summary_group_session.columns = ["_".join(c) for c in summary_group_session.columns]
-        summary_group_session.to_csv(output_dir / "global_metrics_summary_by_group_session.csv")
+        summary_group_session.to_csv(output_dir / (_pilot_prefix + "global_metrics_summary_by_group_session.csv"))
         print("✓ Saved: global_metrics_summary_by_group_session.csv")
 
     # Long-format summary (easy to read)
@@ -814,7 +849,7 @@ def main() -> None:
                 "n":       len(grp_df),
             })
     summary_long = pd.DataFrame(long_rows)
-    summary_long.to_csv(output_dir / "global_metrics_summary_long.csv", index=False)
+    summary_long.to_csv(output_dir / (_pilot_prefix + "global_metrics_summary_long.csv"), index=False)
     print("✓ Saved: global_metrics_summary_long.csv")
 
     # Print small_worldness overview to console
@@ -830,15 +865,18 @@ def main() -> None:
     # ── UMAP ───────────────────────────────────────────────────────────────
     print("\nRunning UMAP...")
     meta_cols = {"subject", "session", group_col, sex_col} - {None}
-    umap_df = run_umap(results_df, meta_cols, umap_params={})
-    umap_df.to_parquet(output_dir / "umap_coordinates.parquet", index=False)
+    if len(results_df) < 10:
+        print(f"  ⚠ UMAP skipped: too few samples ({len(results_df)}) — need ≥10")
+    else:
+        umap_df = run_umap(results_df, meta_cols, umap_params={})
+        umap_df.to_parquet(output_dir / (_pilot_prefix + "umap_coordinates.parquet"), index=False)
     print("✓ Saved: umap_coordinates.parquet")
 
     # ── Trajectories ───────────────────────────────────────────────────────
     print("\nComputing trajectories...")
     trajectory_df = compute_trajectories(umap_df, "subject", "session", group_col, sex_col)
     if not trajectory_df.empty:
-        trajectory_df.to_parquet(output_dir / "trajectory_analysis.parquet", index=False)
+        trajectory_df.to_parquet(output_dir / (_pilot_prefix + "trajectory_analysis.parquet"), index=False)
         print(f"✓ Saved: trajectory_analysis.parquet ({len(trajectory_df)} subjects)")
 
     # ── Plots ──────────────────────────────────────────────────────────────

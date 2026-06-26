@@ -12,6 +12,7 @@ fi
 
 PYTHON_BIN=""
 if command -v python3.10 >/dev/null 2>&1; then
+
   PYTHON_BIN="python3.10"
 elif command -v python3.9 >/dev/null 2>&1; then
   PYTHON_BIN="python3.9"
@@ -26,7 +27,7 @@ fi
 
 uv venv "$VENV_DIR" --python "$PYTHON_BIN"
 
-# Core dependencies for 01_global_basic_metrics.py
+# Core dependencies for global_basic_metrics.py
 uv pip install --python "$VENV_DIR/bin/python" \
   numpy \
   pandas \

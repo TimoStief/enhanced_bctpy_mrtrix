@@ -8,8 +8,6 @@ automatic logging for reproducibility.
 Copy this template and modify for your specific analysis.
 """
 
-import pandas as pd
-import numpy as np
 from pathlib import Path
 import sys
 import runpy
@@ -28,7 +26,7 @@ DESCRIPTION = "Wrapper to run a specific analysis script with logging"
 
 # Analysis parameters
 PARAMETERS = {
-    "script_to_run": "01_global_basic_metrics.py",
+    "script_to_run": "global_basic_metrics.py",
     "run_spec": "analysis_scripts_restructured/1_utilities/run_spec.json",
 }
 
@@ -61,33 +59,63 @@ def load_run_spec() -> dict:
     with open(spec_path, "r", encoding="utf-8") as f:
         spec = json.load(f)
 
+    # Store base dir for relative paths
+    spec["_spec_dir"] = str(spec_path.parent)
+
     # Basic validation
-    for key in ["script", "inputs", "outputs"]:
+    for key in ["inputs", "outputs"]:
         if key not in spec:
             raise ValueError(f"Missing required key in run spec: {key}")
 
     return spec
 
 
+def _resolve_path(spec_dir: Path, raw_path: str) -> Path:
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        return (spec_dir / path).resolve()
+    return path.resolve()
+
+
+def _resolve_script_path(spec: dict, spec_dir: Path) -> Path:
+    """Resolve script path from run_spec or known defaults."""
+    script_raw = spec.get("script")
+    if script_raw:
+        script_path = _resolve_path(spec_dir, script_raw)
+        if not script_path.exists():
+            raise FileNotFoundError(f"Script not found: {script_path}")
+        return script_path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    fallback = repo_root / "2_global_network_metrics" / "global_basic_metrics.py"
+    if fallback.exists():
+        print(f"  ! No script provided in run_spec, using default: {fallback}")
+        return fallback
+
+    raise ValueError(
+        "Missing script in run_spec and no default script found. "
+        "Set 'script' in run_spec.json."
+    )
+
+
 def validate_run_spec(spec: dict) -> dict:
     """Validate inputs/outputs and return resolved paths."""
+    spec_dir = Path(spec.get("_spec_dir", ".")).expanduser().resolve()
+
     resolved = {
-        "script": Path(spec["script"]).expanduser().resolve(),
+        "script": _resolve_script_path(spec, spec_dir),
         "inputs": spec.get("inputs", {}),
         "outputs": spec.get("outputs", {}),
     }
 
-    if not resolved["script"].exists():
-        raise FileNotFoundError(f"Script not found: {resolved['script']}")
-
     inputs = resolved["inputs"]
-    required_inputs = ["data_dir", "metadata_file", "atlas_name", "n_nodes", "file_pattern"]
+    required_inputs = ["data_dir", "metadata_file"]
     for key in required_inputs:
         if key not in inputs:
             raise ValueError(f"Missing required input: {key}")
 
-    data_dir = Path(inputs["data_dir"]).expanduser().resolve()
-    metadata_file = Path(inputs["metadata_file"]).expanduser().resolve()
+    data_dir = _resolve_path(spec_dir, inputs["data_dir"])
+    metadata_file = _resolve_path(spec_dir, inputs["metadata_file"])
 
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")
@@ -97,11 +125,14 @@ def validate_run_spec(spec: dict) -> dict:
     outputs = resolved["outputs"]
     if "output_dir" not in outputs:
         raise ValueError("Missing required outputs.output_dir")
-    output_dir = Path(outputs["output_dir"]).expanduser().resolve()
+    output_dir = _resolve_path(spec_dir, outputs["output_dir"])
 
     resolved["inputs"]["data_dir"] = str(data_dir)
     resolved["inputs"]["metadata_file"] = str(metadata_file)
     resolved["outputs"]["output_dir"] = str(output_dir)
+
+    if "binarize" in spec and "binarize" not in resolved["inputs"]:
+        resolved["inputs"]["binarize"] = spec["binarize"]
 
     return resolved
 

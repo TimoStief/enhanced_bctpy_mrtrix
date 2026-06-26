@@ -43,10 +43,10 @@ Use this table to find where each of your 18 scripts goes in the new organizatio
    cp analysis_scripts/log_analysis.py analysis_scripts_restructured/1_utilities/
 
    # Global metrics
-   cp analysis_scripts/complete_metrics_umap_trajectories.py analysis_scripts_restructured/2_global_network_metrics/01_global_basic_metrics.py
+   cp analysis_scripts/complete_metrics_umap_trajectories.py analysis_scripts_restructured/2_global_network_metrics/global_basic_metrics.py
 
    # Nodal metrics
-   cp analysis_scripts/node_level_hub_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/01_nodal_hub_identification.py
+   cp analysis_scripts/node_level_hub_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/nodal_hub_identification.py
    cp analysis_scripts/node_temporal_trajectory_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/02_nodal_temporal_trajectories.py
    cp analysis_scripts/node_comprehensive_multivariate_analysis.py analysis_scripts_restructured/3_nodal_network_metrics/03_nodal_multivariate_analysis.py
 

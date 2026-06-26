@@ -36,6 +36,7 @@ wheels/
 # Testing
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 
 # OS
@@ -48,6 +49,8 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
+ANALYSIS_LOG.json
+outputs/
 converted_npy/
 *.xlsx
 ANATOMICAL_FINDINGS_EXTENDED.md

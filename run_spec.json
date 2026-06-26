@@ -1,0 +1,17 @@
+{
+  "inputs": {},
+  "outputs": {},
+  "control_group": "ctrl",
+  "alone_groups": [
+    "a1"
+  ],
+  "group_groups": [
+    "s1"
+  ],
+  "short_groups": [
+    "a1"
+  ],
+  "long_groups": [
+    "s1"
+  ]
+}

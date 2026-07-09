@@ -568,14 +568,6 @@ def main() -> None:
             _mc_choice = input("  > ").strip()
 
             if _mc_choice in ("1", "3"):
-                print("  FDR threshold (q)? Enter value or press Enter for default")
-                print("    Recommended: 0.05 (standard) | 0.1 (small samples, n<30)")
-                _fdr_input = input("  > ").strip()
-                try:
-                    _fdr_alpha = float(_fdr_input) if _fdr_input else 0.05
-                except ValueError:
-                    _fdr_alpha = 0.05
-                print(f"  Using FDR threshold: q < {_fdr_alpha}")
                 from scipy.stats import false_discovery_control
                 p_vals = effects_df["p_value"].values
                 try:
@@ -584,10 +576,11 @@ def main() -> None:
                     from statsmodels.stats.multitest import multipletests
                     _, p_fdr, _, _ = multipletests(p_vals, method="fdr_bh")
                 effects_df["p_fdr"] = p_fdr
-                effects_df["significant_fdr"] = p_fdr < _fdr_alpha
-                effects_df[f"sig_fdr_q{_fdr_alpha}"] = p_fdr < _fdr_alpha
-                n_fdr = effects_df["significant_fdr"].sum()
-                print(f"  ✓ FDR correction applied: {n_fdr}/{len(effects_df)} significant (q<{_fdr_alpha})")
+                # Apply all three standard thresholds at once
+                for _q in [0.05, 0.1, 0.2]:
+                    effects_df[f"sig_fdr_q{_q}"] = p_fdr < _q
+                    print(f"  ✓ FDR q<{_q}: {(p_fdr < _q).sum()}/{len(effects_df)} significant")
+                effects_df["significant_fdr"] = p_fdr < 0.05  # default for filtering
 
             if _mc_choice in ("2", "3"):
                 print("  How many permutations? Enter value or press Enter for default")
@@ -604,7 +597,7 @@ def main() -> None:
                     _perm_alpha = float(_perm_input) if _perm_input else 0.05
                 except ValueError:
                     _perm_alpha = 0.05
-                print(f"  Running permutation test ({n_perm}x)...")
+                print(f"  Running permutation test ({n_perm}x, threshold p<{_perm_alpha})...")
                 import numpy as _np2
                 from scipy import stats as _stats2
                 obs_t  = effects_df["t_statistic"].values
@@ -652,14 +645,15 @@ def main() -> None:
             _top_cols += ["metric", "mean_slope", "effect_size_cohens_d", "p_value", "significant"]
             if "p_fdr" in effects_df.columns:
                 _fdr_labeled = [c for c in effects_df.columns if c.startswith("sig_fdr_")]
-                _top_cols += ["p_fdr"] + _fdr_labeled
+                _top_cols += ["p_fdr"] + sorted(_fdr_labeled)
             if "p_perm" in effects_df.columns:
                 _perm_labeled = [c for c in effects_df.columns if c.startswith("sig_perm_")]
                 _top_cols += ["p_perm"] + _perm_labeled
 
             # Filter: uncorrected significant OR survived any correction
             _sig_mask = effects_df["significant"] == True
-            for _labeled_col in [c for c in effects_df.columns if c.startswith("sig_fdr_") or c.startswith("sig_perm_")]:
+            for _labeled_col in [c for c in effects_df.columns
+                                  if c.startswith("sig_fdr_") or c.startswith("sig_perm_")]:
                 _sig_mask = _sig_mask | (effects_df[_labeled_col] == True)
 
             top = effects_df[_sig_mask].sort_values("abs_effect_size", ascending=False)[_top_cols]
@@ -667,7 +661,10 @@ def main() -> None:
             # Summary
             print(f"\nSignificant nodes summary:")
             print(f"  Uncorrected (p<0.05):   {effects_df['significant'].sum()}")
-            for _lc in [c for c in effects_df.columns if c.startswith("sig_fdr_") or c.startswith("sig_perm_")]:
+            print(f"  Uncorrected (p<0.05):      {effects_df['significant'].sum()}")
+            for _lc in sorted([c for c in effects_df.columns if c.startswith("sig_fdr_")]):
+                print(f"  {_lc}: {effects_df[_lc].sum()}")
+            for _lc in [c for c in effects_df.columns if c.startswith("sig_perm_")]:
                 print(f"  {_lc}: {effects_df[_lc].sum()}")
             print(f"  Total in output (any):  {len(top)}")
             print(top.to_string(index=False))

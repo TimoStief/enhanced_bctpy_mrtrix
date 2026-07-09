@@ -199,7 +199,7 @@ def ask_normalize(data_dir: Path, fmt: str, n_nodes: int,
     return result
 
 
-def normalize_matrix(A: np.ndarray, normalize: str) -> np.ndarray:
+def normalize_matrix(A: np.ndarray, normalize: str, **kwargs) -> np.ndarray:
     """
     Normalize connectivity matrix.
 
@@ -232,7 +232,8 @@ def normalize_matrix(A: np.ndarray, normalize: str) -> np.ndarray:
         max_val = A.max()
         return A / max_val if max_val > 0 else A
     elif normalize == "binary":
-        return (A > 0).astype(float)
+        threshold = kwargs.get("threshold", 0) if kwargs else 0
+        return (A > threshold).astype(float)
     else:
         return A.copy()
 
@@ -252,7 +253,10 @@ def parse_args() -> argparse.Namespace:
                         metavar="METRIC",
                         help="Metrics to compute (default: all). "
                              "Available: degree, strength, betweenness, clustering, local_efficiency, participation_coef, within_module_zscore")
-    parser.add_argument("--pilot", nargs="?", const="first", default=None,
+    parser.add_argument("--threshold", type=float, default=None,
+                        help="Threshold for binary normalization (default: 0 = any connection). "
+                             "E.g. --threshold 5 keeps only connections with >5 streamlines")
+    parser.add_argument("--pilot", nargs="?", const="random", default=None,
                         metavar="first|random",
                         help="Pilot mode: process only 1 subject. "
                              "'first' (default) or 'random'")

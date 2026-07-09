@@ -152,6 +152,10 @@ def ask_normalize(data_dir: Path, fmt: str, n_nodes: int,
 
     info = detect_matrix_type(A)
 
+    # Pre-normalization outlier check
+    print("\nGenerating pre-normalization plots...")
+    plot_pre_normalization(data_dir, fmt, output_dir / "plots")
+
     print("\n" + "=" * 70)
     print("MATRIX TYPE DETECTION")
     print("=" * 70)
@@ -197,7 +201,7 @@ def ask_normalize(data_dir: Path, fmt: str, n_nodes: int,
     return result
 
 
-def normalize_matrix(A: np.ndarray, normalize: str) -> np.ndarray:
+def normalize_matrix(A: np.ndarray, normalize: str, **kwargs) -> np.ndarray:
     """
     Normalize connectivity matrix.
 
@@ -230,7 +234,8 @@ def normalize_matrix(A: np.ndarray, normalize: str) -> np.ndarray:
         max_val = A.max()
         return A / max_val if max_val > 0 else A
     elif normalize == "binary":
-        return (A > 0).astype(float)
+        threshold = kwargs.get("threshold", 0) if kwargs else 0
+        return (A > threshold).astype(float)
     else:
         return A.copy()
 
@@ -250,7 +255,10 @@ def parse_args() -> argparse.Namespace:
                         metavar="METRIC",
                         help="Metrics to compute (default: all). "
                              "Available: density, path_length, global_efficiency, clustering_coef, transitivity, modularity, betweenness, local_efficiency, participation_coef, small_worldness")
-    parser.add_argument("--pilot", nargs="?", const="first", default=None,
+    parser.add_argument("--threshold", type=float, default=None,
+                        help="Threshold for binary normalization (default: 0 = any connection). "
+                             "E.g. --threshold 5 keeps only connections with >5 streamlines")
+    parser.add_argument("--pilot", nargs="?", const="random", default=None,
                         metavar="first|random",
                         help="Pilot mode: process only 1 subject. "
                              "'first' (default) or 'random'")
@@ -289,6 +297,8 @@ def load_config(args: argparse.Namespace) -> dict:
         config["output_dir"] = args.output_dir
     if args.binarize is not None:
         config["binarize"] = args.binarize
+    if hasattr(args, "threshold") and args.threshold is not None:
+        config["threshold"] = args.threshold
     if hasattr(args, "pilot") and args.pilot is not None:
         config["pilot"] = args.pilot
     if hasattr(args, "metrics") and args.metrics is not None:
@@ -702,6 +712,56 @@ def make_plots(results_df: pd.DataFrame, umap_df: pd.DataFrame, trajectory_df: p
 # MAIN
 # ============================================================================
 
+
+def plot_pre_normalization(data_dir: Path, fmt: str, output_dir: Path,
+                            n_samples: int = 5) -> None:
+    """
+    Plot raw matrix value distributions before normalization.
+    Shows histogram and boxplot to identify outliers.
+    """
+    import matplotlib.pyplot as plt
+
+    files = list(data_dir.rglob(f"*.{fmt}"))[:n_samples]
+    if not files:
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    all_vals = []
+    max_vals = []
+
+    for f in files:
+        try:
+            if fmt == "npy":
+                A = np.load(f)
+            else:
+                import scipy.io as sio
+                mat = sio.loadmat(str(f))
+                A = list(mat.values())[-1]
+            vals = A[A > 0].flatten()
+            all_vals.append(vals)
+            max_vals.append(A.max())
+            axes[0].hist(np.log1p(vals), bins=50, alpha=0.5, label=f.stem[:20])
+        except Exception:
+            pass
+
+    axes[0].set_xlabel("log1p(streamline count)")
+    axes[0].set_ylabel("Frequency")
+    axes[0].set_title(f"Raw Value Distribution (first {len(files)} matrices)")
+    axes[0].legend(fontsize=6)
+
+    axes[1].boxplot(max_vals)
+    axes[1].set_ylabel("Max streamline count")
+    axes[1].set_title("Max Streamlines per Matrix (outlier check)")
+    axes[1].set_xticks([1])
+    axes[1].set_xticklabels(["subjects"])
+
+    plt.suptitle("Pre-Normalization Check", fontweight="bold")
+    plt.tight_layout()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_dir / "pre_normalization_check.png", dpi=150)
+    plt.close()
+    print("✓ Saved: pre_normalization_check.png")
+
 def main() -> None:
     args = parse_args()
     config = load_config(args)
@@ -787,6 +847,22 @@ def main() -> None:
         results.append(record)
 
     print(f"\n✓ Computed metrics for {len(results)} records")
+
+    # ── Streamline count summary ──────────────────────────────────────────
+    if "max_streamlines" in results_df.columns:
+        stream_df = results_df[["subject", "session", "max_streamlines", "total_streamlines"]].copy()
+        # % change per subject relative to session 1
+        def pct_change(grp):
+            baseline = grp[grp["session"] == grp["session"].min()]["max_streamlines"].values
+            if len(baseline) > 0:
+                grp["max_streamlines_pct_change"] = (grp["max_streamlines"] / baseline[0] - 1) * 100
+            return grp
+        stream_df = stream_df.groupby("subject", group_keys=False).apply(pct_change)
+        stream_df.to_csv(output_dir / (_pilot_prefix + "streamline_counts.csv"), index=False, sep=";")
+        print("✓ Saved: streamline_counts.csv")
+        print("\nMax streamlines per subject (session 1 → last):")
+        pivot = stream_df.pivot_table(index="subject", columns="session", values="max_streamlines", aggfunc="first")
+        print(pivot.to_string())
 
     if not results:
         sys.exit("✗ No matrices could be loaded. Check data_dir and file naming.")

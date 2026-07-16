@@ -678,7 +678,8 @@ def main() -> None:
                 _top_cols += ["p_fdr"] + sorted(_fdr_labeled)
             if "p_perm" in effects_df.columns:
                 _perm_labeled = [c for c in effects_df.columns if c.startswith("sig_perm_")]
-                _top_cols += ["p_perm"] + _perm_labeled
+                _perm_fdr_col = ["p_perm_fdr"] if "p_perm_fdr" in effects_df.columns else []
+                _top_cols += ["p_perm"] + _perm_fdr_col + _perm_labeled
 
             # Filter: uncorrected significant OR survived any correction
             _sig_mask = effects_df["significant"] == True

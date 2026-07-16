@@ -569,8 +569,8 @@ def main() -> None:
             _mc_choice = input("  > ").strip()
 
             if _mc_choice in ("1", "3"):
-                print("  FDR thresholds (q)? Enter values separated by space or press Enter for default")
-                print("    Recommended: 0.05 0.1 0.2")
+                print("  FDR thresholds (q)? Enter values SPACE-separated or press Enter for default")
+                print("    Recommended: 0.05 0.1 0.2   (space-separated, no commas)")
                 _fdr_input = input("  > ").strip()
                 if _fdr_input:
                     try:

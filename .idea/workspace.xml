@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f7e9a91e-fb97-4b20-8b1d-bb3cedc819f7" name="Changes" comment="normalization check plot, pilot random, max./% session to sub and threshold before normalization">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_temporal_trajectories.py" beforeDir="false" afterPath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_temporal_trajectories.py" afterDir="false" />
-    </list>
+    <list default="true" id="f7e9a91e-fb97-4b20-8b1d-bb3cedc819f7" name="Changes" comment="multiple results for diffrent q in permutations" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -130,22 +127,6 @@
       <workItem from="1770711316237" duration="5106000" />
       <workItem from="1770801179320" duration="5838000" />
       <workItem from="1772616904095" duration="37000" />
-    </task>
-    <task id="LOCAL-00002" summary="test commit to enhanced">
-      <option name="closed" value="true" />
-      <created>1770024208359</created>
-      <option name="number" value="00002" />
-      <option name="presentableId" value="LOCAL-00002" />
-      <option name="project" value="LOCAL" />
-      <updated>1770024208359</updated>
-    </task>
-    <task id="LOCAL-00003" summary="prepare for windows">
-      <option name="closed" value="true" />
-      <created>1770711926571</created>
-      <option name="number" value="00003" />
-      <option name="presentableId" value="LOCAL-00003" />
-      <option name="project" value="LOCAL" />
-      <updated>1770711926571</updated>
     </task>
     <task id="LOCAL-00004" summary="paths for windows">
       <option name="closed" value="true" />
@@ -523,7 +504,23 @@
       <option name="project" value="LOCAL" />
       <updated>1783592205807</updated>
     </task>
-    <option name="localTasksCounter" value="51" />
+    <task id="LOCAL-00051" summary="normalization check plot, pilot random, max./% session to sub and threshold before normalization">
+      <option name="closed" value="true" />
+      <created>1784182296003</created>
+      <option name="number" value="00051" />
+      <option name="presentableId" value="LOCAL-00051" />
+      <option name="project" value="LOCAL" />
+      <updated>1784182296004</updated>
+    </task>
+    <task id="LOCAL-00052" summary="multiple results for diffrent q in permutations">
+      <option name="closed" value="true" />
+      <created>1784182338241</created>
+      <option name="number" value="00052" />
+      <option name="presentableId" value="LOCAL-00052" />
+      <option name="project" value="LOCAL" />
+      <updated>1784182338241</updated>
+    </task>
+    <option name="localTasksCounter" value="53" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -541,7 +538,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="group auto detection adjusted" />
     <MESSAGE value="tests for all skripts adjusted codecov 80%+" />
     <MESSAGE value="auto detection groups added to relevant folders" />
     <MESSAGE value="mal adjustments back-up save" />
@@ -566,7 +562,8 @@
     <MESSAGE value="pilot single subject test run integration" />
     <MESSAGE value="normalization adjustments and pilot fixes" />
     <MESSAGE value="normalization check plot, pilot random, max./% session to sub and threshold before normalization" />
-    <option name="LAST_COMMIT_MESSAGE" value="normalization check plot, pilot random, max./% session to sub and threshold before normalization" />
+    <MESSAGE value="multiple results for diffrent q in permutations" />
+    <option name="LAST_COMMIT_MESSAGE" value="multiple results for diffrent q in permutations" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/enhanced_bctpy_mrtrix$preflight_check.coverage" NAME="preflight_check Coverage Results" MODIFIED="1770718692255" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/0_installation" />

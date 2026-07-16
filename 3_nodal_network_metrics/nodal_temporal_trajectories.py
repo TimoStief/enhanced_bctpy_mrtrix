@@ -36,85 +36,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# ── Inline group detection (no external dependency) ───────────────────────────
-
-_GD_KEYWORDS = {
-    "control":  ["control", "ctrl", "waitlist", "wait", "passive"],
-    "alone":    ["alone", "individual", "solo", "single"],
-    "social":   ["group", "social", "team", "collective"],
-    "short":    ["2w", "short", "2week", "week2", "brief"],
-    "long":     ["4w", "long",  "4week", "week4", "extended"],
-}
-
-def _gd_match(groups, keywords):
-    return [g for g in groups if any(k in str(g).lower() for k in keywords)]
-
-def _gd_try_auto(all_groups, group_counts):
-    ctrl = _gd_match(all_groups, _GD_KEYWORDS["control"])
-    if not ctrl:
-        control = group_counts.idxmin()
-    elif len(ctrl) == 1:
-        control = ctrl[0]
-    else:
-        return None
-    intervention = [g for g in all_groups if g != control]
-    alone  = _gd_match(intervention, _GD_KEYWORDS["alone"])
-    social = _gd_match(intervention, _GD_KEYWORDS["social"])
-    short  = _gd_match(intervention, _GD_KEYWORDS["short"])
-    long_  = _gd_match(intervention, _GD_KEYWORDS["long"])
-    if alone or social or short or long_:
-        return {"all": all_groups, "control": control, "intervention": intervention,
-                "alone": alone, "social": social, "short": short, "long": long_}
-    return None
-
-def _gd_interactive(all_groups):
-    print("\n" + "=" * 60)
-    print("GROUP ASSIGNMENT (interactive)")
-    print("=" * 60)
-    print(f"  Found groups: {all_groups}")
-    print("\n  Which is the CONTROL group?")
-    print(f"    [0] Single-group analysis (no control group)")
-    for i, g in enumerate(all_groups):
-        print(f"    [{i+1}] {g}")
-    while True:
-        raw = input("  > ").strip()
-        if raw == "0":
-            print("  ✓ Single-group analysis selected")
-            return {"all": all_groups, "control": None, "intervention": all_groups,
-                    "alone": [], "social": [], "short": [], "long": [], "single_group": True}
-        if raw.isdigit() and 1 <= int(raw) <= len(all_groups):
-            control = all_groups[int(raw) - 1]; break
-        elif raw in all_groups:
-            control = raw; break
-        print("  Please enter a valid number or group name.")
-    intervention = [g for g in all_groups if g != control]
-    alone  = _gd_match(intervention, _GD_KEYWORDS["alone"])
-    social = _gd_match(intervention, _GD_KEYWORDS["social"])
-    short  = _gd_match(intervention, _GD_KEYWORDS["short"])
-    long_  = _gd_match(intervention, _GD_KEYWORDS["long"])
-    return {"all": all_groups, "control": control, "intervention": intervention,
-            "alone": alone, "social": social, "short": short, "long": long_}
-
-def _gd_detect_or_ask(df, group_col, config, run_spec_path=None):
-    all_groups   = df[group_col].dropna().unique().tolist()
-    group_counts = df.groupby(group_col)[df.columns[0]].count()
-    if config.get("control_group"):
-        control      = config["control_group"]
-        intervention = [g for g in all_groups if g != control]
-        return {"all": all_groups, "control": control, "intervention": intervention,
-                "alone": config.get("alone_groups") or _gd_match(intervention, _GD_KEYWORDS["alone"]),
-                "social": config.get("group_groups") or _gd_match(intervention, _GD_KEYWORDS["social"]),
-                "short":  config.get("short_groups") or _gd_match(intervention, _GD_KEYWORDS["short"]),
-                "long":   config.get("long_groups")  or _gd_match(intervention, _GD_KEYWORDS["long"])}
-    groups = _gd_try_auto(all_groups, group_counts)
-    if groups:
-        print(f"  ✓ Control (auto): {groups['control']}, Intervention: {groups['intervention']}")
-        return groups
-    print(f"\n  ⚠ Could not auto-detect group assignments.")
-    return _gd_interactive(all_groups)
-
-
 # Local
+from group_detection import detect_or_ask_groups
 
 # ============================================================================
 # CLI / run_spec LOADING
@@ -488,16 +411,7 @@ def main() -> None:
         intervention_groups = all_groups
         control_group       = all_groups[0] if all_groups else None
     else:
-        all_groups = node_df[group_col].dropna().unique().tolist() if group_col else []
-    if len(all_groups) <= 1 or args.single_group:
-        # Auto single-group or flag set
-        groups = {"control": None, "intervention": all_groups, "all": all_groups,
-                  "alone": [], "social": [], "short": [], "long": []}
-        args.single_group = True
-    else:
-        groups = _gd_detect_or_ask(node_df, group_col, config, run_spec_path)
-    if groups.get("single_group"):
-        args.single_group = True
+        groups = detect_or_ask_groups(node_df, group_col, config, run_spec_path)
         intervention_groups = groups["intervention"]
         control_group       = groups["control"]
     print()
@@ -518,6 +432,7 @@ def main() -> None:
         records = []
         # Compute per-subject slopes for significance testing
         subject_col = "subject"
+        slopes_store = {}  # (node, metric) → list of per-subject slopes
         # Build node→label lookup from node_df
         label_lookup = {}
         if "label" in node_df.columns:
@@ -537,11 +452,11 @@ def main() -> None:
                             subject_slopes.append(slope)
                         except Exception:
                             pass
-                _slopes = subject_slopes  # alias for permutation
                 if len(subject_slopes) >= 2:
                     slopes_arr = np.array(subject_slopes)
                     t_stat, p_val = _stats.ttest_1samp(slopes_arr, 0)
                     cohens_d = slopes_arr.mean() / (slopes_arr.std() + 1e-10)
+                    slopes_store[(node, metric)] = list(subject_slopes)
                     records.append({
                         "node":                node,
                         "label":               label_lookup.get(node, f"Node_{node}"),
@@ -554,151 +469,145 @@ def main() -> None:
                         "abs_effect_size":     float(abs(cohens_d)),
                         "significant":         bool(p_val < 0.05),
                         "n_subjects":          len(subject_slopes),
-                        "_slopes":             list(subject_slopes),  # store for permutation
                     })
         effects_df = pd.DataFrame(records)
         print(f"  + {len(effects_df)} node x metric temporal effects computed")
 
-        # ── Multiple comparisons correction ──────────────────────────────
+        # ── Multiple comparisons correction ──────────────────────────────────
         if not effects_df.empty:
             print("\n  Apply multiple comparisons correction?")
-            print("    [1] FDR only (Benjamini-Hochberg) — fast, standard")
-            print("    [2] Permutation only (1000x) — slower, model-free")
-            print("    [3] FDR + Permutation — most complete")
-            print("    [0] None — skip (for group comparisons: not needed, SVM/RF handle it)")
+            print("    [1] FDR only   — BH on t-test p-values, fast")
+            print("    [2] Permutation only — sign-flip, model-free")
+            print("    [3] Permutation + FDR on perm p-values — most robust")
+            print("    [4] All of the above")
+            print("    [0] None — skip (not needed for group comparisons, SVM/RF handle it)")
             _mc_choice = input("  > ").strip()
 
-            if _mc_choice in ("1", "3"):
-                print("  FDR thresholds (q)? Enter values SPACE-separated or press Enter for default")
-                print("    Recommended: 0.05 0.1 0.2   (space-separated, no commas)")
-                _fdr_input = input("  > ").strip()
-                if _fdr_input:
-                    try:
-                        _fdr_alphas = [float(x) for x in _fdr_input.split()]
-                    except ValueError:
-                        _fdr_alphas = [0.05, 0.1, 0.2]
-                else:
-                    _fdr_alphas = [0.05, 0.1, 0.2]
-                print(f"  Using FDR thresholds: {_fdr_alphas}")
-                print(f"  FDR applied per metric (like BRAPH2) — {len(effects_df['metric'].unique())} metrics × {len(effects_df['node'].unique())} nodes")
+            def _ask_fdr_thresholds(label="FDR"):
+                print(f"  {label} thresholds (q)? SPACE-separated or Enter for default")
+                print("    0.05 = standard | 0.1 = small samples (n<30) | 0.2 = exploratory")
+                _inp = input("  > ").strip()
+                try:
+                    return [float(x) for x in _inp.split()] if _inp else [0.05, 0.1, 0.2]
+                except ValueError:
+                    return [0.05, 0.1, 0.2]
 
-                from scipy.stats import false_discovery_control
-                import pandas as _pd2
-
-                # Apply FDR per metric separately (same as BRAPH2)
-                _fdr_results = []
-                for _metric in effects_df["metric"].unique():
-                    _mask = effects_df["metric"] == _metric
-                    _p = effects_df.loc[_mask, "p_value"].values
+            def _run_fdr(effects_df, col, label):
+                """Apply BH FDR per metric. Returns effects_df with p_fdr and sig columns."""
+                from scipy.stats import false_discovery_control as _fdc
+                effects_df = effects_df.reset_index(drop=True)
+                _p_fdr = np.zeros(len(effects_df))
+                for _m in effects_df["metric"].unique():
+                    _mask = (effects_df["metric"] == _m).values
+                    _pp = effects_df[col].values[_mask]
                     try:
-                        _p_fdr = false_discovery_control(_p, method="bh")
+                        _pf = _fdc(_pp, method="bh")
                     except Exception:
                         from statsmodels.stats.multitest import multipletests
-                        _, _p_fdr, _, _ = multipletests(_p, method="fdr_bh")
-                    _df_m = effects_df[_mask].copy()
-                    _df_m["p_fdr"] = _p_fdr
-                    _fdr_results.append(_df_m)
+                        _, _pf, _, _ = multipletests(_pp, method="fdr_bh")
+                    _p_fdr[_mask] = _pf
+                return effects_df, _p_fdr
 
-                effects_df = _pd2.concat(_fdr_results).sort_index()
-
-                for _q in sorted(_fdr_alphas):
-                    effects_df[f"sig_fdr_q{_q}"] = effects_df["p_fdr"] < _q
-                    _n_sig = effects_df[f"sig_fdr_q{_q}"].sum()
-                    print(f"  ✓ FDR q<{_q} (per metric): {_n_sig}/{len(effects_df)} significant")
-                    # Also show per metric breakdown
-                    for _m in sorted(effects_df["metric"].unique()):
-                        _n = effects_df[effects_df["metric"]==_m][f"sig_fdr_q{_q}"].sum()
-                        if _n > 0:
-                            print(f"      {_m}: {_n}")
-                effects_df["significant_fdr"] = effects_df["p_fdr"] < min(_fdr_alphas)
-
-            if _mc_choice in ("2", "3"):
-                print("  How many permutations? Enter value or press Enter for default")
-                print("    Recommended: 1000 (fast) | 5000 (more stable) | 10000 (publication-ready)")
-                _nperm_input = input("  > ").strip()
-                try:
-                    n_perm = int(_nperm_input) if _nperm_input else 1000
-                except ValueError:
-                    n_perm = 1000
-                print("  Permutation threshold (p)? Enter value or press Enter for default")
-                print("    Recommended: 0.05 (standard)")
-                _perm_input = input("  > ").strip()
-                try:
-                    _perm_alpha = float(_perm_input) if _perm_input else 0.05
-                except ValueError:
-                    _perm_alpha = 0.05
-                print(f"  Running permutation test ({n_perm}x, threshold p<{_perm_alpha})...")
-                import numpy as _np2
-                from scipy import stats as _stats2
-                obs_t  = effects_df["t_statistic"].values
-
-                # Use slopes already computed (stored in _slopes column)
-                _slope_list = [
-                    _np2.array(row["_slopes"]) if "_slopes" in effects_df.columns and len(row["_slopes"]) >= 2
-                    else _np2.array([0.0])
-                    for _, row in effects_df.iterrows()
+            def _run_permutation(effects_df, slopes_store, n_perm):
+                """Sign-flip permutation test. Returns p_perm array."""
+                from scipy import stats as _st2
+                effects_df = effects_df.reset_index(drop=True)
+                _slist = [
+                    np.array(slopes_store.get((int(r["node"]), r["metric"]), [0.0]))
+                    for _, r in effects_df.iterrows()
                 ]
-
-                # Permutation: sign-flip test (correct for one-sample t-test)
-                # Randomly flip signs of slopes → tests if mean is systematically != 0
-                perm_t = _np2.zeros((n_perm, len(obs_t)))
+                obs_t  = effects_df["t_statistic"].values
+                perm_t = np.zeros((n_perm, len(obs_t)))
                 for p in range(n_perm):
                     if p % max(1, n_perm // 10) == 0:
                         print(f"    {p}/{n_perm}...", end="\r")
-                    for j, slopes in enumerate(_slope_list):
-                        if len(slopes) >= 2:
-                            signs    = _np2.random.choice([-1, 1], size=len(slopes))
-                            flipped  = slopes * signs
-                            t, _     = _stats2.ttest_1samp(flipped, 0)
+                    for j, sl in enumerate(_slist):
+                        if len(sl) >= 2:
+                            flipped = np.array(sl) * np.random.choice([-1,1], size=len(sl))
+                            t, _    = _st2.ttest_1samp(flipped, 0)
                             perm_t[p, j] = t
-                        else:
-                            perm_t[p, j] = 0.0
+                return np.mean(np.abs(perm_t) >= np.abs(obs_t), axis=0)
 
-                p_perm = _np2.mean(_np2.abs(perm_t) >= _np2.abs(obs_t), axis=0)
+            # ── FDR on t-test p-values ────────────────────────────────────────
+            if _mc_choice in ("1", "4"):
+                _fdr_qs = _ask_fdr_thresholds("FDR (t-test)")
+                effects_df = effects_df.reset_index(drop=True)
+                effects_df, _p_fdr = _run_fdr(effects_df, "p_value", "t-test")
+                effects_df["p_fdr"] = _p_fdr
+                print(f"  FDR per metric — {len(effects_df['metric'].unique())} metrics × {len(effects_df['node'].unique())} nodes")
+                for _q in sorted(_fdr_qs):
+                    effects_df[f"sig_fdr_q{_q}"] = _p_fdr < _q
+                    print(f"  ✓ FDR q<{_q}: {(effects_df[f'sig_fdr_q{_q}']).sum()}/{len(effects_df)} significant")
+
+            # ── Permutation ───────────────────────────────────────────────────
+            if _mc_choice in ("2", "3", "4"):
+                print("  How many permutations? Press Enter for default")
+                print("    1000 (fast) | 5000 (more stable) | 10000 (publication-ready)")
+                _np_inp = input("  > ").strip()
+                try:
+                    n_perm = int(_np_inp) if _np_inp else 1000
+                except ValueError:
+                    n_perm = 1000
+
+                print(f"  Running sign-flip permutation ({n_perm}x)...")
+                effects_df = effects_df.reset_index(drop=True)
+                p_perm = _run_permutation(effects_df, slopes_store, n_perm)
                 effects_df["p_perm"] = p_perm
-                effects_df["significant_perm"] = p_perm < _perm_alpha
+                print(f"\n  ✓ Permutation done (n={n_perm})")
+
+                # ── FDR on perm p-values (like BRAPH2) ───────────────────────
+                if _mc_choice in ("3", "4"):
+                    _perm_qs = _ask_fdr_thresholds("FDR on permutation p-values")
+                    effects_df, _p_perm_fdr = _run_fdr(effects_df, "p_perm", "perm")
+                    effects_df["p_perm_fdr"] = _p_perm_fdr
+                    print(f"  FDR on perm p-values per metric")
+                    for _q in sorted(_perm_qs):
+                        effects_df[f"sig_perm_fdr_q{_q}"] = _p_perm_fdr < _q
+                        _n = (effects_df[f"sig_perm_fdr_q{_q}"]).sum()
+                        _label = "standard" if _q==0.05 else ("small samples" if _q==0.1 else "exploratory")
+                        print(f"  ✓ Perm FDR q<{_q} ({_label}): {_n}/{len(effects_df)} significant")
+                        for _m in sorted(effects_df["metric"].unique()):
+                            _nm = effects_df[effects_df["metric"]==_m][f"sig_perm_fdr_q{_q}"].sum()
+                            if _nm > 0:
+                                print(f"      {_m}: {_nm}")
+
+                # uncorrected perm threshold summary
+                print("  Uncorrected permutation threshold (p)? Press Enter for 0.05")
+                _pt = input("  > ").strip()
+                try:
+                    _perm_alpha = float(_pt.split()[0]) if _pt else 0.05
+                except (ValueError, IndexError):
+                    _perm_alpha = 0.05
                 effects_df[f"sig_perm_p{_perm_alpha}_n{n_perm}"] = p_perm < _perm_alpha
-                n_perm_sig = effects_df["significant_perm"].sum()
-                print(f"  ✓ Permutation done: {n_perm_sig}/{len(effects_df)} significant (p<{_perm_alpha}, n={n_perm})")
-        if "_slopes" in effects_df.columns:
-            effects_df = effects_df.drop(columns=["_slopes"])
+                print(f"  ✓ Perm uncorrected p<{_perm_alpha}: {(p_perm < _perm_alpha).sum()}/{len(effects_df)} significant")
         effects_df.to_parquet(output_dir / "temporal_effect_sizes.parquet", index=False)
         effects_df.to_csv(output_dir / "temporal_effect_sizes.csv", index=False, sep=";")
         print("  + Saved: temporal_effect_sizes.parquet + .csv")
 
         # Top nodes
         if not effects_df.empty:
-            # Build significant nodes output - include all correction columns
+            # Build significant nodes output
             _top_cols = ["node"]
             if "label" in effects_df.columns:
                 _top_cols.append("label")
             _top_cols += ["metric", "mean_slope", "effect_size_cohens_d", "p_value", "significant"]
-            if "p_fdr" in effects_df.columns:
-                _fdr_labeled = [c for c in effects_df.columns if c.startswith("sig_fdr_")]
-                _top_cols += ["p_fdr"] + sorted(_fdr_labeled)
-            if "p_perm" in effects_df.columns:
-                _perm_labeled = [c for c in effects_df.columns if c.startswith("sig_perm_")]
-                _perm_fdr_col = ["p_perm_fdr"] if "p_perm_fdr" in effects_df.columns else []
-                _top_cols += ["p_perm"] + _perm_fdr_col + _perm_labeled
+            for _col in ["p_fdr"] + sorted([c for c in effects_df.columns if c.startswith("sig_fdr_")]):
+                if _col in effects_df.columns:
+                    _top_cols.append(_col)
+            for _col in ["p_perm","p_perm_fdr"] + sorted([c for c in effects_df.columns if c.startswith("sig_perm_")]):
+                if _col in effects_df.columns:
+                    _top_cols.append(_col)
 
-            # Filter: uncorrected significant OR survived any correction
             _sig_mask = effects_df["significant"] == True
-            for _labeled_col in [c for c in effects_df.columns
-                                  if c.startswith("sig_fdr_") or c.startswith("sig_perm_")]:
-                _sig_mask = _sig_mask | (effects_df[_labeled_col] == True)
+            for _lc in [c for c in effects_df.columns if c.startswith("sig_fdr_") or c.startswith("sig_perm_")]:
+                _sig_mask = _sig_mask | (effects_df[_lc] == True)
 
             top = effects_df[_sig_mask].sort_values("abs_effect_size", ascending=False)[_top_cols]
-
-            # Summary
             print(f"\nSignificant nodes summary:")
-            print(f"  Uncorrected (p<0.05):   {effects_df['significant'].sum()}")
-            print(f"  Uncorrected (p<0.05):      {effects_df['significant'].sum()}")
-            for _lc in sorted([c for c in effects_df.columns if c.startswith("sig_fdr_")]):
+            print(f"  Uncorrected (p<0.05): {effects_df['significant'].sum()}")
+            for _lc in sorted([c for c in effects_df.columns if c.startswith("sig_")]):
                 print(f"  {_lc}: {effects_df[_lc].sum()}")
-            for _lc in [c for c in effects_df.columns if c.startswith("sig_perm_")]:
-                print(f"  {_lc}: {effects_df[_lc].sum()}")
-            print(f"  Total in output (any):  {len(top)}")
-            print(top.to_string(index=False))
+            print(f"  Total in output (any): {len(top)}")
             top.to_csv(output_dir / "significant_temporal_nodes.csv", index=False, sep=";")
             print("  + Saved: significant_temporal_nodes.csv")
 
@@ -708,43 +617,6 @@ def main() -> None:
         effects_df = compute_intervention_effects(
             trajectory_df, intervention_groups, control_group, n_nodes
         )
-
-        # ── Multiple comparisons correction ──────────────────────────────
-        if not effects_df.empty:
-            print("\n  Apply multiple comparisons correction?")
-            print("    [1] FDR only (Benjamini-Hochberg) — fast, standard")
-            print("    [2] Permutation only (1000x) — slower, model-free")
-            print("    [3] FDR + Permutation — most complete")
-            print("    [0] None — skip (for group comparisons: not needed, SVM/RF handle it)")
-            _mc_choice = input("  > ").strip()
-
-            if _mc_choice in ("1", "3"):
-                from scipy.stats import false_discovery_control
-                p_vals = effects_df["p_value"].values
-                try:
-                    p_fdr = false_discovery_control(p_vals, method="bh")
-                except Exception:
-                    from statsmodels.stats.multitest import multipletests
-                    _, p_fdr, _, _ = multipletests(p_vals, method="fdr_bh")
-                effects_df["p_fdr"] = p_fdr
-                effects_df["significant_fdr"] = p_fdr < 0.05
-                print(f"  ✓ FDR: {effects_df['significant_fdr'].sum()}/{len(effects_df)} significant (q<0.05)")
-
-            if _mc_choice in ("2", "3"):
-                import numpy as _np2
-                from scipy import stats as _stats2
-                print("  Running permutation test (1000x)...")
-                n_perm  = 1000
-                obs_t   = effects_df["cohens_d"].values if "cohens_d" in effects_df.columns else effects_df["effect_size_cohens_d"].values
-                perm_t  = _np2.zeros((n_perm, len(obs_t)))
-                for _p in range(n_perm):
-                    if _p % 100 == 0:
-                        print(f"    {_p}/{n_perm}...", end="\r")
-                    perm_t[_p] = _np2.random.permutation(obs_t)
-                p_perm = _np2.mean(_np2.abs(perm_t) >= _np2.abs(obs_t), axis=0)
-                effects_df["p_perm"] = p_perm
-                effects_df["significant_perm"] = p_perm < 0.05
-                print(f"\n  ✓ Permutation: {effects_df['significant_perm'].sum()}/{len(effects_df)} significant")
         print(f"  + {len(effects_df)} node x metric effects computed")
         effects_df.to_parquet(output_dir / "intervention_effect_sizes.parquet", index=False)
         print("  + Saved: intervention_effect_sizes.parquet")

@@ -537,6 +537,7 @@ def main() -> None:
                             subject_slopes.append(slope)
                         except Exception:
                             pass
+                _slopes = subject_slopes  # alias for permutation
                 if len(subject_slopes) >= 2:
                     slopes_arr = np.array(subject_slopes)
                     t_stat, p_val = _stats.ttest_1samp(slopes_arr, 0)
@@ -553,7 +554,7 @@ def main() -> None:
                         "abs_effect_size":     float(abs(cohens_d)),
                         "significant":         bool(p_val < 0.05),
                         "n_subjects":          len(subject_slopes),
-                        "_slopes":             slopes_arr.tolist(),  # store for permutation
+                        "_slopes":             list(subject_slopes),  # store for permutation
                     })
         effects_df = pd.DataFrame(records)
         print(f"  + {len(effects_df)} node x metric temporal effects computed")
@@ -568,19 +569,48 @@ def main() -> None:
             _mc_choice = input("  > ").strip()
 
             if _mc_choice in ("1", "3"):
+                print("  FDR thresholds (q)? Enter values separated by space or press Enter for default")
+                print("    Recommended: 0.05 0.1 0.2")
+                _fdr_input = input("  > ").strip()
+                if _fdr_input:
+                    try:
+                        _fdr_alphas = [float(x) for x in _fdr_input.split()]
+                    except ValueError:
+                        _fdr_alphas = [0.05, 0.1, 0.2]
+                else:
+                    _fdr_alphas = [0.05, 0.1, 0.2]
+                print(f"  Using FDR thresholds: {_fdr_alphas}")
+                print(f"  FDR applied per metric (like BRAPH2) — {len(effects_df['metric'].unique())} metrics × {len(effects_df['node'].unique())} nodes")
+
                 from scipy.stats import false_discovery_control
-                p_vals = effects_df["p_value"].values
-                try:
-                    p_fdr = false_discovery_control(p_vals, method="bh")
-                except Exception:
-                    from statsmodels.stats.multitest import multipletests
-                    _, p_fdr, _, _ = multipletests(p_vals, method="fdr_bh")
-                effects_df["p_fdr"] = p_fdr
-                # Apply all three standard thresholds at once
-                for _q in [0.05, 0.1, 0.2]:
-                    effects_df[f"sig_fdr_q{_q}"] = p_fdr < _q
-                    print(f"  ✓ FDR q<{_q}: {(p_fdr < _q).sum()}/{len(effects_df)} significant")
-                effects_df["significant_fdr"] = p_fdr < 0.05  # default for filtering
+                import pandas as _pd2
+
+                # Apply FDR per metric separately (same as BRAPH2)
+                _fdr_results = []
+                for _metric in effects_df["metric"].unique():
+                    _mask = effects_df["metric"] == _metric
+                    _p = effects_df.loc[_mask, "p_value"].values
+                    try:
+                        _p_fdr = false_discovery_control(_p, method="bh")
+                    except Exception:
+                        from statsmodels.stats.multitest import multipletests
+                        _, _p_fdr, _, _ = multipletests(_p, method="fdr_bh")
+                    _df_m = effects_df[_mask].copy()
+                    _df_m["p_fdr"] = _p_fdr
+                    _fdr_results.append(_df_m)
+
+                effects_df = _pd2.concat(_fdr_results).sort_index()
+
+                for _q in sorted(_fdr_alphas):
+                    effects_df[f"sig_fdr_q{_q}"] = effects_df["p_fdr"] < _q
+                    _n_sig = effects_df[f"sig_fdr_q{_q}"].sum()
+                    print(f"  ✓ FDR q<{_q} (per metric): {_n_sig}/{len(effects_df)} significant")
+                    # Also show per metric breakdown
+                    for _m in sorted(effects_df["metric"].unique()):
+                        _n = effects_df[effects_df["metric"]==_m][f"sig_fdr_q{_q}"].sum()
+                        if _n > 0:
+                            print(f"      {_m}: {_n}")
+                effects_df["significant_fdr"] = effects_df["p_fdr"] < min(_fdr_alphas)
 
             if _mc_choice in ("2", "3"):
                 print("  How many permutations? Enter value or press Enter for default")

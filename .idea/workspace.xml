@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f7e9a91e-fb97-4b20-8b1d-bb3cedc819f7" name="Changes" comment="help adjustments for trajectories">
+    <list default="true" id="f7e9a91e-fb97-4b20-8b1d-bb3cedc819f7" name="Changes" comment="permutation finally working correctly">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_temporal_trajectories.py" beforeDir="false" afterPath="$PROJECT_DIR$/3_nodal_network_metrics/nodal_temporal_trajectories.py" afterDir="false" />
     </list>
@@ -130,14 +130,6 @@
       <workItem from="1770711316237" duration="5106000" />
       <workItem from="1770801179320" duration="5838000" />
       <workItem from="1772616904095" duration="37000" />
-    </task>
-    <task id="LOCAL-00005" summary="test data into json">
-      <option name="closed" value="true" />
-      <created>1770802524673</created>
-      <option name="number" value="00005" />
-      <option name="presentableId" value="LOCAL-00005" />
-      <option name="project" value="LOCAL" />
-      <updated>1770802524673</updated>
     </task>
     <task id="LOCAL-00006" summary="atlas">
       <option name="closed" value="true" />
@@ -523,7 +515,15 @@
       <option name="project" value="LOCAL" />
       <updated>1784183032810</updated>
     </task>
-    <option name="localTasksCounter" value="54" />
+    <task id="LOCAL-00054" summary="permutation finally working correctly">
+      <option name="closed" value="true" />
+      <created>1784205751841</created>
+      <option name="number" value="00054" />
+      <option name="presentableId" value="LOCAL-00054" />
+      <option name="project" value="LOCAL" />
+      <updated>1784205751841</updated>
+    </task>
+    <option name="localTasksCounter" value="55" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -541,7 +541,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="auto detection groups added to relevant folders" />
     <MESSAGE value="mal adjustments back-up save" />
     <MESSAGE value="small adjustments back-up save" />
     <MESSAGE value="progress bar and timers for skripts" />
@@ -566,7 +565,8 @@
     <MESSAGE value="normalization check plot, pilot random, max./% session to sub and threshold before normalization" />
     <MESSAGE value="multiple results for diffrent q in permutations" />
     <MESSAGE value="help adjustments for trajectories" />
-    <option name="LAST_COMMIT_MESSAGE" value="help adjustments for trajectories" />
+    <MESSAGE value="permutation finally working correctly" />
+    <option name="LAST_COMMIT_MESSAGE" value="permutation finally working correctly" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/enhanced_bctpy_mrtrix$preflight_check.coverage" NAME="preflight_check Coverage Results" MODIFIED="1770718692255" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/0_installation" />

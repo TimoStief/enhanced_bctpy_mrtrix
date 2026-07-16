@@ -62,6 +62,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--node-metrics-dir", help="Directory with node_level_metrics.parquet")
     parser.add_argument("--output-dir",       help="Output directory")
     parser.add_argument("--control-group",    help="Control group label (auto-detected if omitted)")
+    parser.add_argument("--sessions", nargs="+", type=int, default=None,
+                        metavar="N",
+                        help="Sessions to include in analysis (default: all). "
+                             "E.g. --sessions 2 3 4 to exclude baseline session 1")
     parser.add_argument("--single-group",  action="store_true", default=False,
                         help="Single-group mode: analyze temporal changes within one group (no control needed)")
     return parser.parse_args()
@@ -477,9 +481,7 @@ def main() -> None:
         if not effects_df.empty:
             print("\n  Apply multiple comparisons correction?")
             print("    [1] FDR only   — BH on t-test p-values, fast")
-            print("    [2] Permutation only — sign-flip, model-free")
-            print("    [3] Permutation + FDR on perm p-values — most robust")
-            print("    [4] All of the above")
+            print("    [2] Permutation + FDR — sign-flip + BH on perm p-values, most robust")
             print("    [0] None — skip (not needed for group comparisons, SVM/RF handle it)")
             _mc_choice = input("  > ").strip()
 
@@ -529,7 +531,7 @@ def main() -> None:
                 return np.mean(np.abs(perm_t) >= np.abs(obs_t), axis=0)
 
             # ── FDR on t-test p-values ────────────────────────────────────────
-            if _mc_choice in ("1", "4"):
+            if _mc_choice == "1":
                 _fdr_qs = _ask_fdr_thresholds("FDR (t-test)")
                 effects_df = effects_df.reset_index(drop=True)
                 effects_df, _p_fdr = _run_fdr(effects_df, "p_value", "t-test")
@@ -540,7 +542,7 @@ def main() -> None:
                     print(f"  ✓ FDR q<{_q}: {(effects_df[f'sig_fdr_q{_q}']).sum()}/{len(effects_df)} significant")
 
             # ── Permutation ───────────────────────────────────────────────────
-            if _mc_choice in ("2", "3", "4"):
+            if _mc_choice == "2":
                 print("  How many permutations? Press Enter for default")
                 print("    1000 (fast) | 5000 (more stable) | 10000 (publication-ready)")
                 _np_inp = input("  > ").strip()
@@ -556,7 +558,7 @@ def main() -> None:
                 print(f"\n  ✓ Permutation done (n={n_perm})")
 
                 # ── FDR on perm p-values (like BRAPH2) ───────────────────────
-                if _mc_choice in ("3", "4"):
+                if _mc_choice == "2":
                     _perm_qs = _ask_fdr_thresholds("FDR on permutation p-values")
                     effects_df, _p_perm_fdr = _run_fdr(effects_df, "p_perm", "perm")
                     effects_df["p_perm_fdr"] = _p_perm_fdr

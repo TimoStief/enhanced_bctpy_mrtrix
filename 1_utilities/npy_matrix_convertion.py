@@ -127,8 +127,11 @@ def convert_file(src: Path, out_dir: Path, bids: bool = True) -> Path | None:
 
 
 def convert_directory(src_dir: Path, out_dir: Path,
-                      extensions: set[str], bids: bool = True) -> tuple[int, int]:
+                      extensions: set[str], bids: bool = True,
+                      filter_pattern: str | None = None) -> tuple[int, int]:
     files = sorted(f for f in src_dir.rglob("*") if f.suffix.lower() in extensions)
+    if filter_pattern:
+        files = [f for f in files if filter_pattern in f.name]
 
     if not files:
         print(f"  ⚠ No {extensions} files found in {src_dir}")
@@ -156,6 +159,10 @@ def parse_args() -> argparse.Namespace:
     grp.add_argument("--input-dir", help="Folder to scan recursively")
 
     p.add_argument("--output-dir", required=True, help="Output folder")
+    p.add_argument("--filter", default=None,
+                   metavar="PATTERN",
+                   help="Only convert files whose name contains this pattern. "
+                        "E.g. --filter roi_normalized")
     p.add_argument("--ext", nargs="+", default=None,
                    help="Extensions to convert, e.g. --ext xlsx txt")
     p.add_argument("--no-bids", action="store_true",
@@ -175,6 +182,8 @@ def main() -> None:
     print(f"  Formats :  {sorted(exts)}")
     print(f"  Output  :  {out}")
     print(f"  BIDS    :  {'yes (sub-XX/ses-X/)' if bids else 'no'}")
+    if args.filter:
+        print(f"  Filter  :  *{args.filter}*")
     print()
 
     if args.input:
@@ -190,7 +199,7 @@ def main() -> None:
         src_dir = Path(args.input_dir).expanduser().resolve()
         if not src_dir.exists():
             sys.exit(f"✗ Directory not found: {src_dir}")
-        ok, failed = convert_directory(src_dir, out, exts, bids=bids)
+        ok, failed = convert_directory(src_dir, out, exts, bids=bids, filter_pattern=args.filter)
         print(f"\n{'='*60}")
         print(f"  ✓ Converted : {ok}")
         if failed:

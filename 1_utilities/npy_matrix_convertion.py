@@ -2,13 +2,14 @@
 """
 Matrix Format Converter
 ========================
-Converts connectivity matrices from .xlsx / .txt / .csv → .npy
+Converts connectivity matrices from .xlsx / .txt / .csv / .mat → .npy
 Output is organized in BIDS-conform folder structure: sub-XX/ses-X/
 
 USAGE:
     python convert_matrices.py --input-dir G:/Masterarbeit/matrizen/connectogram/xlsx/Kleist/count --output-dir C:/Users/timo-/Desktop/Forschung/laufstudie_masterarbeit_npy/kleist
     python convert_matrices.py --input path/to/single_matrix.xlsx --output-dir C:/output
     python convert_matrices.py --input-dir ... --ext xlsx   # only xlsx
+    python convert_matrices.py --input-dir ... --ext mat    # DSI Studio .mat files
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 
-SUPPORTED = {".xlsx", ".xls", ".txt", ".csv"}
+SUPPORTED = {".xlsx", ".xls", ".txt", ".csv", ".mat"}
 
 
 # ── Parsers ───────────────────────────────────────────────────────────────────
@@ -64,6 +65,27 @@ def _load_csv(path: Path) -> np.ndarray:
     return df.values.astype(np.float64)
 
 
+def _load_mat(path: Path) -> np.ndarray:
+    """Load DSI Studio .mat connectivity file."""
+    import scipy.io
+    mat = scipy.io.loadmat(str(path))
+    skip = {"__header__", "__version__", "__globals__"}
+    candidates = [k for k in mat if k not in skip]
+    # Prefer keys with connectivity-related names
+    for pref in ("connectivity", "matrix", "count", "data"):
+        for c in candidates:
+            if pref in c.lower():
+                arr = np.array(mat[c], dtype=np.float64)
+                if arr.ndim == 2:
+                    return arr
+    # Fall back to first 2-D array
+    for c in candidates:
+        arr = np.array(mat[c], dtype=np.float64)
+        if arr.ndim == 2:
+            return arr
+    raise ValueError(f"No 2-D matrix found in {path.name}. Keys: {candidates}")
+
+
 def load_matrix(path: Path) -> np.ndarray:
     ext = path.suffix.lower()
     if ext in {".xlsx", ".xls"}:
@@ -72,17 +94,31 @@ def load_matrix(path: Path) -> np.ndarray:
         return _load_txt(path)
     elif ext == ".csv":
         return _load_csv(path)
+    elif ext == ".mat":
+        return _load_mat(path)
     raise ValueError(f"Unsupported format: {ext}")
 
 
 # ── BIDS path extraction ──────────────────────────────────────────────────────
 
 def extract_bids(filename: str) -> tuple[str | None, str | None]:
-    """Extract sub-XX and ses-X from filename."""
+    """Extract sub-XX and ses-X from filename.
+
+    For DSI Studio files like '100206.qsdr.fz.tt.gz.HCP-MMP.connectivity.mat'
+    the subject ID is the leading number → converted to sub-100206.
+    """
+    # Standard BIDS pattern
     sub = re.search(r"(sub-[A-Za-z0-9]+)", filename)
     ses = re.search(r"(ses-\d+)", filename)
-    return (sub.group(1) if sub else None,
-            ses.group(1) if ses else None)
+    if sub:
+        return (sub.group(1), ses.group(1) if ses else None)
+
+    # DSI Studio pattern: leading number before first dot
+    dsi_match = re.match(r"^(\d+)\.", filename)
+    if dsi_match:
+        return (f"sub-{dsi_match.group(1)}", ses.group(1) if ses else None)
+
+    return (None, None)
 
 
 # ── Conversion ────────────────────────────────────────────────────────────────
@@ -111,7 +147,7 @@ def convert_file(src: Path, out_dir: Path, bids: bool = True) -> Path | None:
         if sub and ses:
             dst_dir = out_dir / sub / ses
         elif sub:
-            dst_dir = out_dir / sub
+            dst_dir = out_dir / sub / "ses-1"
         else:
             # Fallback: use source subfolder name (e.g. ses-1)
             dst_dir = out_dir / src.parent.name
@@ -152,7 +188,7 @@ def convert_directory(src_dir: Path, out_dir: Path,
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Convert connectivity matrices (xlsx/txt/csv) → npy with BIDS output"
+        description="Convert connectivity matrices (xlsx/txt/csv/mat) → npy with BIDS output"
     )
     grp = p.add_mutually_exclusive_group(required=True)
     grp.add_argument("--input",     help="Single file to convert")
@@ -164,7 +200,7 @@ def parse_args() -> argparse.Namespace:
                    help="Only convert files whose name contains this pattern. "
                         "E.g. --filter roi_normalized")
     p.add_argument("--ext", nargs="+", default=None,
-                   help="Extensions to convert, e.g. --ext xlsx txt")
+                   help="Extensions to convert, e.g. --ext xlsx txt mat")
     p.add_argument("--no-bids", action="store_true",
                    help="Don't create sub-XX/ses-X folder structure")
     return p.parse_args()

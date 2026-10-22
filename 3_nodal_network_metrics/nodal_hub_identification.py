@@ -419,7 +419,7 @@ def _load_matrix_raw(filepath: Path, fmt: str) -> np.ndarray | None:
 def find_matrix_file(data_dir: Path, subject: str, session: str, fmt: str) -> Path | None:
     subj_clean    = subject.replace("sub-", "")
     subj_prefixed = f"sub-{subj_clean}"
-    ses_clean     = str(session).replace("ses-", "")
+    ses_clean     = str(session).replace("ses-", "").replace(".0", "")
 
     patterns = [
         f"*{subj_clean}*ses*{ses_clean}*.{fmt}",
@@ -610,7 +610,8 @@ def build_summary_record(subject: str, session, atlas: str, subj_meta: pd.Series
 # ============================================================================
 
 def make_plots(summary_df: pd.DataFrame, plot_dir: Path,
-               group_col: str | None) -> None:
+               group_col: str | None, pilot_prefix: str = "") -> None:
+    _pilot_prefix = pilot_prefix
     plot_dir.mkdir(exist_ok=True)
 
     # 1. Hub counts by group
@@ -768,7 +769,7 @@ def main() -> None:
 
     # ── Plots ──────────────────────────────────────────────────────────────
     print("\nCreating plots...")
-    make_plots(summary_df, output_dir / "plots", group_col)
+    make_plots(summary_df, output_dir / "plots", group_col, _pilot_prefix)
 
     # ── Done ───────────────────────────────────────────────────────────────
     _end_time = datetime.now()

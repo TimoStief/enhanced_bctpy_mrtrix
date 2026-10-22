@@ -312,6 +312,7 @@ def normalize_sex(node_df: pd.DataFrame, sex_col: str) -> pd.DataFrame:
 def run_five_group_anova(node_df, metric_cols, group_col, groups, n_nodes):
     records = []
     all_groups = groups["all"]
+    label_lookup = {i: f"Node_{i}" for i in range(1, n_nodes + 1)}
 
     for node in range(1, n_nodes + 1):
         _progress(node, n_nodes, "5-Group ANOVA")
@@ -342,6 +343,7 @@ def run_ttest_analysis(node_df, metric_cols, group_col, group_a, group_b,
                        label_a, label_b, n_nodes):
     """Generic t-test between two sets of groups."""
     records = []
+    label_lookup = {i: f"Node_{i}" for i in range(1, n_nodes + 1)}
     for node in range(1, n_nodes + 1):
         nd = node_df[node_df["node"] == node]
         for metric in metric_cols:
@@ -371,6 +373,7 @@ def run_ttest_analysis(node_df, metric_cols, group_col, group_a, group_b,
 
 def run_age_correlations(node_df, metric_cols, age_col, n_nodes):
     records = []
+    label_lookup = {i: f"Node_{i}" for i in range(1, n_nodes + 1)}
     for node in range(1, n_nodes + 1):
         nd = node_df[node_df["node"] == node]
         for metric in metric_cols:

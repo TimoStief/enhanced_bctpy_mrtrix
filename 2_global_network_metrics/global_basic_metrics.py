@@ -415,7 +415,7 @@ def find_matrix_file(data_dir: Path, subject: str, session: str, fmt: str) -> Pa
     """
     subj_clean = subject.replace("sub-", "")
     subj_prefixed = f"sub-{subj_clean}"
-    ses_clean = str(session).replace("ses-", "")
+    ses_clean = str(session).replace("ses-", "").replace(".0", "")
 
     patterns = [
         f"*{subj_clean}*ses*{ses_clean}*.{fmt}",

@@ -228,10 +228,13 @@ def compute_intervention_effects(trajectory_df, intervention_groups, control_gro
                 "metric":                  metric,
                 "intervention_mean_slope": float(interv.mean()),
                 "control_mean_slope":      float(control.mean()),
+                "mean_slope":              float(interv.mean()),
                 "effect_size_cohens_d":    cohens_d,
                 "abs_effect_size":         abs(cohens_d),
                 "t_statistic":             t_stat,
                 "p_value":                 p_val,
+                "change_direction":        "increasing" if cohens_d > 0 else "decreasing",
+                "significant":             bool(not np.isnan(p_val) and p_val < 0.05),
             })
     return pd.DataFrame(records)
 
@@ -622,6 +625,18 @@ def main() -> None:
         print(f"  + {len(effects_df)} node x metric effects computed")
         effects_df.to_parquet(output_dir / "intervention_effect_sizes.parquet", index=False)
         print("  + Saved: intervention_effect_sizes.parquet")
+
+        # ── FIX: also save temporal_effect_sizes.csv and top_temporal_nodes.csv ──
+        effects_df.to_csv(output_dir / "temporal_effect_sizes.csv", index=False)
+        print("  + Saved: temporal_effect_sizes.csv")
+
+        if not effects_df.empty:
+            top_cols = ["node", "metric", "mean_slope", "abs_effect_size",
+                        "effect_size_cohens_d", "change_direction", "significant"]
+            top_cols = [c for c in top_cols if c in effects_df.columns]
+            top = effects_df.nlargest(20, "abs_effect_size")[top_cols]
+            top.to_csv(output_dir / "top_temporal_nodes.csv", index=False)
+            print("  + Saved: top_temporal_nodes.csv")
 
     # Hub analysis
     print("\nAnalyzing hub-specific responses...")
